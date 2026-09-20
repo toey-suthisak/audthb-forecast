@@ -75,14 +75,53 @@ export default async function Hero({ data }: { data: DashboardData }) {
 
   const forecasts =
     data.coreFxScore !== null
-      ? FORECAST_HORIZONS.map((horizon) => ({
-          horizon,
-          forecast: buildForecast(horizon, data.coreFxScore!, referenceRate),
-          trackRecord: evaluation.groups.find(
-            (g) => g.horizon === horizon && g.forecastVersion === FORECAST_VERSION,
-          ),
-        }))
+      ? FORECAST_HORIZONS.map((horizon) => {
+          const forecast = buildForecast(horizon, data.coreFxScore!, referenceRate);
+          return {
+            horizon,
+            forecast,
+            trackRecord: evaluation.groups.find(
+              (g) => g.horizon === horizon && g.forecastVersion === FORECAST_VERSION,
+            ),
+            priceRange:
+              referenceRate !== null
+                ? {
+                    low: referenceRate * (1 + forecast.predictedRangeLowPct / 100),
+                    high: referenceRate * (1 + forecast.predictedRangeHighPct / 100),
+                  }
+                : null,
+          };
+        })
       : [];
+
+  // Every horizon's direction comes from the same Core FX Score threshold
+  // (>=15 BULLISH, <=-15 BEARISH) -- only the move-size scale differs by
+  // horizon, not the directional call itself. Spelled out here so a score
+  // sitting inside that band (as most quiet days do) doesn't read as a
+  // bug when all three show NEUTRAL together.
+  const allNeutral =
+    forecasts.length > 0 && forecasts.every((f) => f.forecast.predictedDirection === "NEUTRAL");
+
+  // Reasons to treat any of the above with extra care -- pulled from
+  // signals already computed elsewhere on this page (Confidence, Event
+  // Risk, Model Coverage, market hours), never invented for this panel.
+  const cautionNotes: string[] = [];
+  if (eventRisk.level !== "NONE" && eventRisk.event && eventRisk.hoursUntil !== null) {
+    cautionNotes.push(
+      `${eventRisk.event.eventName} (${eventRisk.event.currency}) in ${formatHoursUntil(eventRisk.hoursUntil)} -- expect volatility around that time.`,
+    );
+  }
+  if (confidence.level !== "HIGH") {
+    cautionNotes.push(`Confidence is currently ${confidence.level} -- see reasons above.`);
+  }
+  if (data.availableCoreWeight < 100) {
+    cautionNotes.push(
+      `Model coverage is only ${data.availableCoreWeight.toFixed(1)}/100 right now -- some signals are missing or delayed.`,
+    );
+  }
+  if (data.latestPriceFreshness.status === "MARKET_CLOSED") {
+    cautionNotes.push("AUD/THB market is currently closed -- these ranges assume normal trading conditions.");
+  }
 
   return (
     <div className="p-6 sm:p-8">
@@ -175,40 +214,71 @@ export default async function Hero({ data }: { data: DashboardData }) {
             </p>
 
             {forecasts.length > 0 ? (
-              <div className="mt-2 divide-y divide-stone-200 dark:divide-stone-800">
-                {forecasts.map(({ horizon, forecast, trackRecord }) => (
-                  <div key={horizon} className="py-2.5 first:pt-0 last:pb-0">
-                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                      <span className="text-xs font-semibold text-stone-500 dark:text-stone-500 shrink-0">
-                        {horizon}
-                      </span>
-                      <p className={`text-lg font-semibold ${forecastDirectionColor(forecast.predictedDirection)}`}>
-                        {forecast.predictedDirection}
-                      </p>
-                      <StatusBadge label="Uncalibrated" tone="amber" />
-                      <span className="text-xs text-stone-600 dark:text-stone-400 ml-auto">
-                        {forecast.predictedMovePct >= 0 ? "+" : ""}
-                        {forecast.predictedMovePct.toFixed(2)}% ({forecast.predictedRangeLowPct.toFixed(2)}% to{" "}
-                        {forecast.predictedRangeHighPct.toFixed(2)}%)
-                      </span>
-                    </div>
+              <>
+                {allNeutral && (
+                  <p className="text-xs text-stone-600 dark:text-stone-400 mt-1.5 leading-relaxed">
+                    All three read NEUTRAL because Core FX Score ({data.coreFxScore}) is inside the -15 to +15
+                    neutral band -- every horizon uses the same directional call, only the predicted move size
+                    differs.
+                  </p>
+                )}
 
-                    <p className="text-xs text-stone-600 dark:text-stone-400 mt-1">
-                      {trackRecord && !trackRecord.insufficientData ? (
-                        <>
-                          Direction correct {(trackRecord.model.directionalAccuracy! * 100).toFixed(1)}% of last{" "}
-                          {trackRecord.sampleSize} (baseline{" "}
-                          {(trackRecord.baselineNoChange.directionalAccuracy! * 100).toFixed(1)}%)
-                        </>
-                      ) : (
-                        `Not enough resolved forecasts yet to show accuracy${
-                          trackRecord ? ` (${trackRecord.sampleSize}/${trackRecord.minSampleSize})` : ""
-                        }.`
+                <div className="mt-2 divide-y divide-stone-200 dark:divide-stone-800">
+                  {forecasts.map(({ horizon, forecast, trackRecord, priceRange }) => (
+                    <div key={horizon} className="py-2.5 first:pt-0 last:pb-0">
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <span className="text-xs font-semibold text-stone-500 dark:text-stone-500 shrink-0">
+                          {horizon}
+                        </span>
+                        <p className={`text-lg font-semibold ${forecastDirectionColor(forecast.predictedDirection)}`}>
+                          {forecast.predictedDirection}
+                        </p>
+                        <StatusBadge label="Uncalibrated" tone="amber" />
+                        <span className="text-xs text-stone-600 dark:text-stone-400 ml-auto">
+                          {forecast.predictedMovePct >= 0 ? "+" : ""}
+                          {forecast.predictedMovePct.toFixed(2)}% ({forecast.predictedRangeLowPct.toFixed(2)}% to{" "}
+                          {forecast.predictedRangeHighPct.toFixed(2)}%)
+                        </span>
+                      </div>
+
+                      {priceRange && (
+                        <p className="text-xs text-stone-500 dark:text-stone-500 mt-0.5">
+                          Price range: {priceRange.low.toFixed(4)} to {priceRange.high.toFixed(4)}
+                        </p>
                       )}
+
+                      <p className="text-xs text-stone-600 dark:text-stone-400 mt-1">
+                        {trackRecord && !trackRecord.insufficientData ? (
+                          <>
+                            Direction correct {(trackRecord.model.directionalAccuracy! * 100).toFixed(1)}% of last{" "}
+                            {trackRecord.sampleSize} (baseline{" "}
+                            {(trackRecord.baselineNoChange.directionalAccuracy! * 100).toFixed(1)}%)
+                          </>
+                        ) : (
+                          `Not enough resolved forecasts yet to show accuracy${
+                            trackRecord ? ` (${trackRecord.sampleSize}/${trackRecord.minSampleSize})` : ""
+                          }.`
+                        )}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                {cautionNotes.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-stone-200 dark:border-stone-800">
+                    <p className="text-xs font-medium text-amber-700 dark:text-amber-400 uppercase tracking-widest">
+                      Caution
                     </p>
+                    <ul className="mt-1 space-y-1">
+                      {cautionNotes.map((note, i) => (
+                        <li key={i} className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed">
+                          {note}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             ) : (
               <p className="text-sm text-stone-600 dark:text-stone-400 mt-1">
                 Core FX Score is not available right now -- unable to calculate a forecast.
