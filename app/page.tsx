@@ -6,7 +6,6 @@ import ThemeToggle from "@/components/ThemeToggle";
 import Hero from "@/components/Hero";
 import MarketRates from "@/components/MarketRates";
 import CrossCheck from "@/components/CrossCheck";
-import ScoreBreakdown from "@/components/ScoreBreakdown";
 import Alerts from "@/components/Alerts";
 import DailyRecap from "@/components/DailyRecap";
 import MarketClock from "@/components/MarketClock";
@@ -211,9 +210,6 @@ export default async function Home() {
           </div>
 
           <TrendChart />
-
-          {/* SIGNAL MODEL */}
-          <ScoreBreakdown data={data} />
 
           {/* TRACK RECORD */}
           <Evaluation />

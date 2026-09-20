@@ -144,12 +144,9 @@ export default async function ScoreBreakdown({
   return (
     <div className="p-6">
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold tracking-tight inline-flex items-center">
-            <StatusLight colorClassName="text-brass-500 dark:text-brass-400" />
-            Score Breakdown
-          </h2>
-          <p className="text-xs text-stone-600 mt-1">Tap a factor to see how it's calculated.</p>
+        <div className="inline-flex items-center">
+          <StatusLight colorClassName="text-brass-500 dark:text-brass-400" />
+          <p className="text-xs text-stone-600 dark:text-stone-400">Tap a factor to see how it's calculated.</p>
         </div>
 
         <div className="text-right shrink-0">

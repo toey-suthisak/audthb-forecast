@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { DashboardData } from "@/lib/dashboard-data";
 import { getEventRisk } from "@/lib/event-calendar-data";
 import { getConfidence, type ConfidenceLevel } from "@/lib/confidence-data";
@@ -40,6 +41,21 @@ function scoreTextColor(score: number | null) {
   return "text-amber-700 dark:text-amber-400";
 }
 
+function formatFactorScore(score: number | null) {
+  if (score === null) return null;
+  return `${score > 0 ? "+" : ""}${score}`;
+}
+
+// Matches ScoreBreakdown's own per-factor coloring (sign-based) --
+// distinct from scoreTextColor above, which bands the aggregate score
+// against the -15/+15 bias thresholds instead.
+function factorScoreColor(score: number | null) {
+  if (score === null) return "text-stone-500";
+  if (score > 0) return "text-emerald-700 dark:text-emerald-400";
+  if (score < 0) return "text-red-700 dark:text-red-400";
+  return "text-stone-600 dark:text-stone-300";
+}
+
 function forecastDirectionColor(direction: ForecastDirection) {
   if (direction === "BULLISH") return "text-emerald-700 dark:text-emerald-400";
   if (direction === "BEARISH") return "text-red-700 dark:text-red-400";
@@ -66,6 +82,19 @@ export default async function Hero({ data }: { data: DashboardData }) {
   const confidence = await getConfidence(data);
 
   const referenceRate = data.latestPrice ? Number(data.latestPrice.rate) : null;
+
+  // Top-level score per factor only -- the full breakdown (sub-factors,
+  // formulas, coverage detail) lives on /score-breakdown now; this is
+  // just enough to scan at a glance next to the aggregate score.
+  const scoreFactors: { name: string; score: number | null }[] = [
+    { name: "Price / Momentum", score: data.priceMomentumScore },
+    { name: "Cross Currency", score: data.crossCurrencyScore },
+    { name: "Relative Market", score: data.relativeMarketScore },
+    { name: "Commodity", score: data.commodityScore },
+    { name: "Mean Reversion", score: data.meanReversionScore },
+    { name: "Macro / Policy", score: data.macroScore },
+    { name: "Risk / VIXY", score: data.riskScore },
+  ];
 
   // Track Record's own numbers for each horizon/version, reused here so
   // the line under each prediction states the model's actual measured
@@ -334,10 +363,6 @@ export default async function Hero({ data }: { data: DashboardData }) {
               </p>
             </div>
 
-            <p className="text-xs text-stone-600 dark:text-stone-400 mt-2">
-              Model factors: Price, Cross, Relative Market, Commodity, Macro / Policy, Risk and Mean Reversion.
-            </p>
-
             <p className="text-xs text-stone-600 dark:text-stone-400 mt-1">
               Coverage is the share of data actually available right now, not the accuracy of the score.
             </p>
@@ -346,6 +371,26 @@ export default async function Hero({ data }: { data: DashboardData }) {
               Gold isn't included in the score yet, but coverage can still reach 100/100 when all other data is
               complete, and drops when data is missing or the market is closed.
             </p>
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-stone-200 dark:border-stone-800">
+            <p className="text-sm text-stone-600 dark:text-stone-400">Factors behind this score</p>
+
+            <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5">
+              {scoreFactors.map((f) => (
+                <div key={f.name} className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-stone-600 dark:text-stone-400 truncate">{f.name}</span>
+                  <Figure value={formatFactorScore(f.score)} className={`text-xs font-semibold shrink-0 ${factorScoreColor(f.score)}`} />
+                </div>
+              ))}
+            </div>
+
+            <Link
+              href="/score-breakdown"
+              className="mt-3 inline-block text-xs font-medium text-brass-700 dark:text-brass-400 hover:underline underline-offset-2"
+            >
+              View full Score Breakdown &rarr;
+            </Link>
           </div>
         </div>
       </div>
