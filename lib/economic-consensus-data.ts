@@ -146,6 +146,10 @@ export async function getEconomicConsensus(): Promise<{
     .select("event_date,currency,event_name,impact,forecast_value,previous_value,actual_value,source_url")
     .gte("event_date", today)
     .lte("event_date", weekAhead)
+    // HIGH only -- MEDIUM rows may still linger from before this filter
+    // was narrowed; this excludes them defensively rather than relying
+    // on the ingest route alone to have already dropped them.
+    .eq("impact", "HIGH")
     // Only rows that actually have a forecast or previous value to show --
     // an event with neither (e.g. a speech) has nothing for a reader to
     // judge direction from.

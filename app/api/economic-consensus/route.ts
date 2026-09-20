@@ -12,13 +12,17 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 
 const FEED_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.xml";
 const RELEVANT_CURRENCIES = new Set(["AUD", "USD"]);
-const RELEVANT_IMPACTS = new Set(["High", "Medium"]);
+// HIGH only -- MEDIUM cluttered the homepage's curated Market Consensus
+// list without adding much (Consumer Sentiment, Unemployment Claims,
+// etc.); every impact level is still available on the full
+// /economic-calendar page via ff_weekly_calendar below.
+const RELEVANT_IMPACTS = new Set(["High"]);
 
 type ParsedEvent = {
   eventDate: string; // YYYY-MM-DD
   currency: string;
   eventName: string;
-  impact: "HIGH" | "MEDIUM";
+  impact: "HIGH";
   forecastValue: string | null;
   previousValue: string | null;
   actualValue: string | null;
@@ -69,7 +73,7 @@ export function parseFfCalendar(xml: string): ParsedEvent[] {
       eventDate,
       currency,
       eventName: title,
-      impact: impactRaw === "High" ? "HIGH" : "MEDIUM",
+      impact: "HIGH",
       forecastValue: extractTag(block, "forecast"),
       previousValue: extractTag(block, "previous"),
       actualValue: extractTag(block, "actual"),
