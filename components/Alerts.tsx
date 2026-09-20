@@ -30,21 +30,28 @@ function CloseIcon() {
 export default function Alerts({ alerts }: { alerts: Alert[] }) {
   const [visible, setVisible] = useState(false);
   const [entered, setEntered] = useState(false);
+  // What's actually on screen, captured at the moment it's shown --
+  // decoupled from the live `alerts` prop so a background refresh
+  // (RefreshControls polls every 60s) resolving the underlying condition
+  // can't yank an unacknowledged popup away out from under the user. Only
+  // the close button, or a genuinely new/different alert set once the
+  // prior one is dismissed, changes what's shown.
+  const [shown, setShown] = useState<{ key: string; alerts: Alert[] } | null>(null);
   const key = alertsKey(alerts);
 
   useEffect(() => {
-    if (alerts.length === 0) {
-      setVisible(false);
-      return;
-    }
+    if (shown || alerts.length === 0) return;
 
     let dismissedKey: string | null = null;
     try {
       dismissedKey = localStorage.getItem(DISMISSED_KEY);
     } catch {}
 
-    setVisible(dismissedKey !== key);
-  }, [key, alerts.length]);
+    if (dismissedKey !== key) {
+      setShown({ key, alerts });
+      setVisible(true);
+    }
+  }, [key, alerts, shown]);
 
   useEffect(() => {
     if (!visible) {
@@ -55,17 +62,18 @@ export default function Alerts({ alerts }: { alerts: Alert[] }) {
     return () => cancelAnimationFrame(id);
   }, [visible]);
 
-  if (!visible) return null;
+  if (!visible || !shown) return null;
 
   const dismiss = () => {
     setVisible(false);
     try {
-      localStorage.setItem(DISMISSED_KEY, key);
+      localStorage.setItem(DISMISSED_KEY, shown.key);
     } catch {}
+    setShown(null);
   };
 
-  const criticalCount = alerts.filter((a) => a.severity === "critical").length;
-  const warningCount = alerts.filter((a) => a.severity === "warning").length;
+  const criticalCount = shown.alerts.filter((a) => a.severity === "critical").length;
+  const warningCount = shown.alerts.filter((a) => a.severity === "warning").length;
 
   return (
     <div className="fixed inset-x-4 top-4 z-40 sm:left-1/2 sm:inset-x-auto sm:w-full sm:max-w-2xl sm:-translate-x-1/2">
@@ -97,7 +105,7 @@ export default function Alerts({ alerts }: { alerts: Alert[] }) {
         </div>
 
         <div className="mt-3 space-y-2 max-h-[50vh] overflow-y-auto">
-          {alerts.map((alert) => (
+          {shown.alerts.map((alert) => (
             <div
               key={alert.label}
               className="rounded-md border border-stone-200 dark:border-stone-800 bg-inset p-3"
