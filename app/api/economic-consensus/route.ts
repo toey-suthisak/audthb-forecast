@@ -11,11 +11,12 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 // =========================================================
 
 const FEED_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.xml";
-// Every currency, HIGH and MEDIUM impact -- not just AUD/USD. Global
-// risk-sentiment-moving events (ECB, SNB, BOJ, etc.) matter too, and
-// this is still a small, curated subset: every impact level and
-// currency is separately available in full on /economic-calendar via
-// ff_weekly_calendar below.
+// Briefly widened to every currency, then narrowed back -- the
+// non-AUD/USD/THB events (ECB, SNB, BOJ, etc.) turned Market Consensus
+// into too long a list for what's meant to be a quick, curated read.
+// Every currency and impact level is still available in full on
+// /economic-calendar via ff_weekly_calendar below.
+const RELEVANT_CURRENCIES = new Set(["AUD", "USD", "THB"]);
 const RELEVANT_IMPACTS = new Set(["High", "Medium"]);
 
 type ParsedEvent = {
@@ -57,7 +58,7 @@ export function parseFfCalendar(xml: string): ParsedEvent[] {
 
   for (const block of blocks) {
     const currency = extractTag(block, "country");
-    if (!currency) continue;
+    if (!currency || !RELEVANT_CURRENCIES.has(currency)) continue;
 
     const impactRaw = extractTag(block, "impact");
     if (!impactRaw || !RELEVANT_IMPACTS.has(impactRaw)) continue;

@@ -2,12 +2,13 @@ import "server-only";
 import { supabaseAdmin } from "@/lib/supabase-server";
 
 // Forward-looking market consensus (forecast vs previous, backfilled with
-// actual once released) for this week's HIGH/MEDIUM-impact events across
-// every currency, plus a directional lean derived from a hand-curated
-// polarity map (see POLARITY_RULES below). Events with no
-// forecast/previous (e.g. a speech) still show -- they're still worth
-// knowing about -- just without a lean, since there's nothing to
-// compare.
+// actual once released) for this week's AUD/USD/THB HIGH/MEDIUM-impact
+// events, plus a directional lean derived from a hand-curated polarity
+// map (see POLARITY_RULES below). Events with no forecast/previous
+// (e.g. a speech) still show -- they're still worth knowing about --
+// just without a lean, since there's nothing to compare. (Briefly
+// widened to every currency, then narrowed back -- too long a list for
+// what's meant to be a quick, curated read.)
 //
 // ForexFactory's own site shows a "Usual Effect" note per event (e.g.
 // "higher than expected is good for the currency") -- that would be the
@@ -150,6 +151,9 @@ export async function getEconomicConsensus(): Promise<{
     .gte("event_date", today)
     .lte("event_date", weekAhead)
     .in("impact", ["HIGH", "MEDIUM"])
+    // AUD/USD/THB only -- defensive, since rows from the brief
+    // every-currency widening may still linger until they age out.
+    .in("currency", ["AUD", "USD", "THB"])
     .order("event_date", { ascending: true });
 
   if (error) {

@@ -101,7 +101,7 @@ export default function MarketConsensus({ consensus }: { consensus: ConsensusEve
       <h2 className="text-xl font-semibold tracking-tight inline-flex items-center">
         <StatusLight colorClassName="text-amber-500 dark:text-amber-400" />
         Market Consensus
-        <InfoTip text="Forecast/previous/actual values for this week's High/Medium-impact releases across every currency, from ForexFactory's public calendar. The up/down badge (where shown) is our own hand-coded textbook polarity for a handful of common indicator types, not ForexFactory's own guidance -- a reading aid, not a tested signal. No badge means the indicator type isn't in that list; read the raw numbers yourself. For a non-AUD/USD currency, this is that currency's own direction, not a translated AUD/THB call." />
+        <InfoTip text="Forecast/previous/actual values for this week's High/Medium-impact AUD/USD/THB releases, from ForexFactory's public calendar. The up/down badge (where shown) is our own hand-coded textbook polarity for a handful of common indicator types, not ForexFactory's own guidance -- a reading aid, not a tested signal. No badge means the indicator type isn't in that list; read the raw numbers yourself. For a USD event, this is USD's own direction, not a translated AUD/THB call." />
       </h2>
 
       <div className="mt-3">
