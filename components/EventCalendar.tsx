@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { CalendarEvent } from "@/lib/event-calendar-data";
 import type { ConsensusEvent, ConsensusLean } from "@/lib/economic-consensus-data";
 import StatusBadge, { type BadgeTone } from "@/components/StatusBadge";
@@ -191,6 +192,13 @@ export default function EventCalendar({
           </div>
         </div>
       )}
+
+      <Link
+        href="/economic-calendar"
+        className="mt-4 inline-block text-xs font-medium text-brass-700 dark:text-brass-400 hover:underline underline-offset-2"
+      >
+        View full economic calendar (all currencies) &rarr;
+      </Link>
     </div>
   );
 }

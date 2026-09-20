@@ -1,5 +1,6 @@
 import "server-only";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import { FORECAST_VERSION } from "@/lib/forecast-data";
 
 // Workflow E (see AUDTHB-project-status.md): compare the Forecast engine
 // against baselines once forecast_outcomes has resolved rows. Written
@@ -232,8 +233,14 @@ export async function getEvaluationSummary(): Promise<{
     }
   }
 
+  // Only the current FORECAST_VERSION per horizon -- an older version's
+  // bucket (e.g. DAILY v1.0.0, superseded by the 2026-09-20 recalibration)
+  // stays queryable in the DB for history, but showing it next to the
+  // current version on the dashboard just reads as a confusing duplicate,
+  // not useful context.
   const groups = Array.from(groupedMap.values())
     .map(evaluateGroup)
+    .filter((g) => g.forecastVersion === FORECAST_VERSION)
     .sort((a, b) => a.horizon.localeCompare(b.horizon));
 
   return {

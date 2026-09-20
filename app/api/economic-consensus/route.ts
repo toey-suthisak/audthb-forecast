@@ -80,6 +80,51 @@ export function parseFfCalendar(xml: string): ParsedEvent[] {
   return events;
 }
 
+type FullCalendarEvent = {
+  eventDate: string;
+  eventTime: string | null;
+  currency: string;
+  eventName: string;
+  impact: string; // FF's own casing: High | Medium | Low | Holiday
+  forecastValue: string | null;
+  previousValue: string | null;
+  actualValue: string | null;
+  sourceUrl: string | null;
+};
+
+// Every currency, every impact level -- for the standalone "this week's
+// economic calendar" page, not the AUD/THB-scoped consensus feature
+// above. Same feed, same fetch, just unfiltered.
+export function parseFfCalendarFull(xml: string): FullCalendarEvent[] {
+  const blocks = xml.match(/<event>[\s\S]*?<\/event>/g) ?? [];
+  const events: FullCalendarEvent[] = [];
+
+  for (const block of blocks) {
+    const currency = extractTag(block, "country");
+    const title = extractTag(block, "title");
+    const dateRaw = extractTag(block, "date");
+    const impact = extractTag(block, "impact");
+    if (!currency || !title || !dateRaw || !impact) continue;
+
+    const eventDate = parseFfDate(dateRaw);
+    if (!eventDate) continue;
+
+    events.push({
+      eventDate,
+      eventTime: extractTag(block, "time"),
+      currency,
+      eventName: title,
+      impact,
+      forecastValue: extractTag(block, "forecast"),
+      previousValue: extractTag(block, "previous"),
+      actualValue: extractTag(block, "actual"),
+      sourceUrl: extractTag(block, "url"),
+    });
+  }
+
+  return events;
+}
+
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) return NextResponse.json({ error: "CRON_SECRET is not configured" }, { status: 503 });
@@ -101,31 +146,58 @@ export async function GET(request: Request) {
     }
 
     const xml = await response.text();
-    const events = parseFfCalendar(xml);
+    const fetchedAt = new Date().toISOString();
 
-    if (events.length === 0) {
-      return NextResponse.json({ updated: 0, skipped: 0, note: "No relevant AUD/USD High/Medium events this week" });
+    const events = parseFfCalendar(xml);
+    let consensusUpdated = 0;
+
+    if (events.length > 0) {
+      const rows = events.map((e) => ({
+        event_date: e.eventDate,
+        currency: e.currency,
+        event_name: e.eventName,
+        impact: e.impact,
+        forecast_value: e.forecastValue,
+        previous_value: e.previousValue,
+        actual_value: e.actualValue,
+        source_url: e.sourceUrl,
+        fetched_at: fetchedAt,
+      }));
+
+      const { error } = await supabaseAdmin
+        .from("economic_consensus")
+        .upsert(rows, { onConflict: "event_date,currency,event_name" });
+
+      if (error) throw new Error(`economic_consensus upsert error: ${error.message}`);
+      consensusUpdated = rows.length;
     }
 
-    const rows = events.map((e) => ({
-      event_date: e.eventDate,
-      currency: e.currency,
-      event_name: e.eventName,
-      impact: e.impact,
-      forecast_value: e.forecastValue,
-      previous_value: e.previousValue,
-      actual_value: e.actualValue,
-      source_url: e.sourceUrl,
-      fetched_at: new Date().toISOString(),
-    }));
+    const fullEvents = parseFfCalendarFull(xml);
+    let fullCalendarUpdated = 0;
 
-    const { error } = await supabaseAdmin
-      .from("economic_consensus")
-      .upsert(rows, { onConflict: "event_date,currency,event_name" });
+    if (fullEvents.length > 0) {
+      const fullRows = fullEvents.map((e) => ({
+        event_date: e.eventDate,
+        event_time: e.eventTime,
+        currency: e.currency,
+        event_name: e.eventName,
+        impact: e.impact,
+        forecast_value: e.forecastValue,
+        previous_value: e.previousValue,
+        actual_value: e.actualValue,
+        source_url: e.sourceUrl,
+        fetched_at: fetchedAt,
+      }));
 
-    if (error) throw new Error(`economic_consensus upsert error: ${error.message}`);
+      const { error: fullError } = await supabaseAdmin
+        .from("ff_weekly_calendar")
+        .upsert(fullRows, { onConflict: "event_date,currency,event_name,event_time" });
 
-    return NextResponse.json({ updated: rows.length });
+      if (fullError) throw new Error(`ff_weekly_calendar upsert error: ${fullError.message}`);
+      fullCalendarUpdated = fullRows.length;
+    }
+
+    return NextResponse.json({ consensusUpdated, fullCalendarUpdated });
   } catch (error) {
     console.error("Economic consensus error:", error);
     return NextResponse.json(

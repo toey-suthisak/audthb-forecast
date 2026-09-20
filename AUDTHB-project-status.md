@@ -140,6 +140,36 @@ parsing bug during testing: FF mixes CDATA-wrapped tags (date, impact,
 forecast) with plain-text tags (title, country) in the same feed --
 `extractTag` in the route now matches either shape.
 
+**Directional lean added right after**: the user pointed out ForexFactory
+shows a "Usual Effect" note per event on each event's own detail page (e.g.
+"higher than expected is good for the currency") -- the real polarity
+source, but it lives only on ~75 individual per-event pages, not the one
+weekly export file already fetched. Scraping those would be a materially
+riskier pattern than the single daily export fetch. Instead, `POLARITY_RULES`
+in `lib/economic-consensus-data.ts` hand-codes the same well-known textbook
+polarity for a narrow set of common indicator types (employment change,
+unemployment rate, retail sales/GDP/PMI/confidence, CPI/inflation) and
+compares actual-vs-forecast (once released) or forecast-vs-previous
+(before release). Anything outside that list gets no badge -- never a
+guessed one. Not wired into the live Core FX Score -- shown as context
+in `Market Consensus` only, since doing so would reset Track Record's
+version bucket again and is a bigger decision on its own.
+
+**Full weekly Economic Calendar added same day**: the user wanted the whole
+week's ForexFactory data, not just the AUD/USD subset `economic_consensus`
+curates. `app/api/economic-consensus` now also upserts every event (every
+currency, every impact level, including Low/Holiday) into a second table,
+`ff_weekly_calendar` -- same single daily fetch, no extra requests against
+FF's feed. New page `/economic-calendar` (masthead-lite pattern, like
+`/backtest` and `/status`) lists it grouped by day, linked from the
+homepage's Event Calendar card.
+
+**Track Record de-duplicated**: `getEvaluationSummary()` now filters to
+only the current `FORECAST_VERSION` per horizon. DAILY's old `v1.0.0`
+bucket (pre-recalibration) was still showing alongside the current `v1.0.1`
+one, which read as a confusing duplicate rather than useful history --
+the old version's rows stay in the DB, just not surfaced on the dashboard.
+
 ## Current model weights (MODEL_VERSION 1.3.0)
 
 Top-level (sums to 100 when every factor has data):
