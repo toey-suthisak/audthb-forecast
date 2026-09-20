@@ -83,17 +83,52 @@ export default async function Hero({ data }: { data: DashboardData }) {
 
   const referenceRate = data.latestPrice ? Number(data.latestPrice.rate) : null;
 
-  // Top-level score per factor only -- the full breakdown (sub-factors,
-  // formulas, coverage detail) lives on /score-breakdown now; this is
-  // just enough to scan at a glance next to the aggregate score.
-  const scoreFactors: { name: string; score: number | null }[] = [
-    { name: "Price / Momentum", score: data.priceMomentumScore },
-    { name: "Cross Currency", score: data.crossCurrencyScore },
-    { name: "Relative Market", score: data.relativeMarketScore },
-    { name: "Commodity", score: data.commodityScore },
-    { name: "Mean Reversion", score: data.meanReversionScore },
-    { name: "Macro / Policy", score: data.macroScore },
-    { name: "Risk / VIXY", score: data.riskScore },
+  // Top-level score per factor, with the same name/tooltip/weight used on
+  // the full /score-breakdown page -- just without that page's nested
+  // sub-factor detail, which is one click away via the link below.
+  const scoreFactors: { name: string; tooltip: string; weightLabel: string; score: number | null }[] = [
+    {
+      name: "Price / Momentum",
+      tooltip: "Shows what the market is doing right now, before slower news or data can catch up.",
+      weightLabel: "FX Weight: 35%",
+      score: data.priceMomentumScore,
+    },
+    {
+      name: "Cross Currency",
+      tooltip: "Double-checks the price a second way, so one glitchy data feed can't fool the model.",
+      weightLabel: "FX Weight: 20%",
+      score: data.crossCurrencyScore,
+    },
+    {
+      name: "Relative Market",
+      tooltip: "Money flows and regional risk appetite can move AUD/THB even when nothing changes locally.",
+      weightLabel: `Weight: ${data.relativeMarketEffectiveWeight.toFixed(1)}/15`,
+      score: data.relativeMarketScore,
+    },
+    {
+      name: "Commodity",
+      tooltip: "Iron ore and oil prices move AUD/THB on their own, separate from currency markets.",
+      weightLabel: `Weight: ${data.commodityEffectiveFxWeight.toFixed(1)}/8`,
+      score: data.commodityScore,
+    },
+    {
+      name: "Mean Reversion",
+      tooltip: "A price that moved too far too fast today tends to snap back a little.",
+      weightLabel: "FX Weight: 5%",
+      score: data.meanReversionScore,
+    },
+    {
+      name: "Macro / Policy",
+      tooltip: "Rates, inflation, jobs and growth set the bigger trend under the day's price swings.",
+      weightLabel: `Weight: ${data.macroEffectiveFxWeight.toFixed(1)}/10`,
+      score: data.macroScore,
+    },
+    {
+      name: "Risk / VIXY",
+      tooltip: "AUD is a 'risk' currency -- investors sell it for safety when markets get volatile.",
+      weightLabel: `Weight: ${data.riskEffectiveWeight.toFixed(1)}/7`,
+      score: data.riskScore,
+    },
   ];
 
   // Track Record's own numbers for each horizon/version, reused here so
@@ -376,11 +411,21 @@ export default async function Hero({ data }: { data: DashboardData }) {
           <div className="mt-4 pt-4 border-t border-stone-200 dark:border-stone-800">
             <p className="text-sm text-stone-600 dark:text-stone-400">Factors behind this score</p>
 
-            <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5">
+            <div className="mt-1">
               {scoreFactors.map((f) => (
-                <div key={f.name} className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-stone-600 dark:text-stone-400 truncate">{f.name}</span>
-                  <Figure value={formatFactorScore(f.score)} className={`text-xs font-semibold shrink-0 ${factorScoreColor(f.score)}`} />
+                <div
+                  key={f.name}
+                  className="flex items-center justify-between gap-3 py-3 border-b border-stone-200 dark:border-stone-800 last:border-b-0"
+                >
+                  <span className="inline-flex items-center gap-2 min-w-0">
+                    <span className="text-sm font-semibold truncate">{f.name}</span>
+                    <InfoTip text={f.tooltip} />
+                  </span>
+
+                  <span className="flex items-center gap-3 shrink-0">
+                    <span className="text-xs text-stone-600 hidden sm:inline">{f.weightLabel}</span>
+                    <Figure value={formatFactorScore(f.score)} className={`text-base font-semibold ${factorScoreColor(f.score)}`} />
+                  </span>
                 </div>
               ))}
             </div>
