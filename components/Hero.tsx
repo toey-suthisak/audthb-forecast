@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { DashboardData } from "@/lib/dashboard-data";
 import { getEventRisk } from "@/lib/event-calendar-data";
 import { getConfidence, type ConfidenceLevel } from "@/lib/confidence-data";
@@ -6,6 +5,7 @@ import { buildForecast, FORECAST_HORIZONS, FORECAST_VERSION, type ForecastDirect
 import { getEvaluationSummary } from "@/lib/evaluation-data";
 import StatusBadge, { type BadgeTone } from "@/components/StatusBadge";
 import ScoreGauge from "@/components/ScoreGauge";
+import ScoreBreakdown from "@/components/ScoreBreakdown";
 import InfoTip from "@/components/InfoTip";
 import Figure from "@/components/Figure";
 
@@ -41,21 +41,6 @@ function scoreTextColor(score: number | null) {
   return "text-amber-700 dark:text-amber-400";
 }
 
-function formatFactorScore(score: number | null) {
-  if (score === null) return null;
-  return `${score > 0 ? "+" : ""}${score}`;
-}
-
-// Matches ScoreBreakdown's own per-factor coloring (sign-based) --
-// distinct from scoreTextColor above, which bands the aggregate score
-// against the -15/+15 bias thresholds instead.
-function factorScoreColor(score: number | null) {
-  if (score === null) return "text-stone-500";
-  if (score > 0) return "text-emerald-700 dark:text-emerald-400";
-  if (score < 0) return "text-red-700 dark:text-red-400";
-  return "text-stone-600 dark:text-stone-300";
-}
-
 function forecastDirectionColor(direction: ForecastDirection) {
   if (direction === "BULLISH") return "text-emerald-700 dark:text-emerald-400";
   if (direction === "BEARISH") return "text-red-700 dark:text-red-400";
@@ -82,19 +67,6 @@ export default async function Hero({ data }: { data: DashboardData }) {
   const confidence = await getConfidence(data);
 
   const referenceRate = data.latestPrice ? Number(data.latestPrice.rate) : null;
-
-  // Top-level score per factor only -- the full breakdown (sub-factors,
-  // formulas, coverage detail) lives on /score-breakdown now; this is
-  // just enough to scan at a glance next to the aggregate score.
-  const scoreFactors: { name: string; score: number | null }[] = [
-    { name: "Price / Momentum", score: data.priceMomentumScore },
-    { name: "Cross Currency", score: data.crossCurrencyScore },
-    { name: "Relative Market", score: data.relativeMarketScore },
-    { name: "Commodity", score: data.commodityScore },
-    { name: "Mean Reversion", score: data.meanReversionScore },
-    { name: "Macro / Policy", score: data.macroScore },
-    { name: "Risk / VIXY", score: data.riskScore },
-  ];
 
   // Track Record's own numbers for each horizon/version, reused here so
   // the line under each prediction states the model's actual measured
@@ -154,9 +126,9 @@ export default async function Hero({ data }: { data: DashboardData }) {
 
   return (
     <div className="p-6 sm:p-8">
-      <div className="grid md:grid-cols-2 gap-8">
+      <div className="flex flex-col gap-8">
         {/* RATE */}
-        <div className="md:border-r border-stone-200 dark:border-stone-800 md:pr-8">
+        <div>
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <p className="text-xs font-medium text-stone-600 dark:text-stone-400 uppercase tracking-widest">
               AUD/THB Spot
@@ -317,7 +289,7 @@ export default async function Hero({ data }: { data: DashboardData }) {
         </div>
 
         {/* CORE FX SCORE */}
-        <div>
+        <div className="pt-8 border-t border-stone-200 dark:border-stone-800">
           <p className="text-xs font-medium text-stone-600 dark:text-stone-400 uppercase tracking-widest inline-flex items-center">
             Core FX Score
             <InfoTip text="One score combining 7 market and economic signals: -100 (bearish AUD) to +100 (bullish AUD). Not a price prediction." />
@@ -374,23 +346,7 @@ export default async function Hero({ data }: { data: DashboardData }) {
           </div>
 
           <div className="mt-4 pt-4 border-t border-stone-200 dark:border-stone-800">
-            <p className="text-sm text-stone-600 dark:text-stone-400">Factors behind this score</p>
-
-            <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5">
-              {scoreFactors.map((f) => (
-                <div key={f.name} className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-stone-600 dark:text-stone-400 truncate">{f.name}</span>
-                  <Figure value={formatFactorScore(f.score)} className={`text-xs font-semibold shrink-0 ${factorScoreColor(f.score)}`} />
-                </div>
-              ))}
-            </div>
-
-            <Link
-              href="/score-breakdown"
-              className="mt-3 inline-block text-xs font-medium text-brass-700 dark:text-brass-400 hover:underline underline-offset-2"
-            >
-              View full Score Breakdown &rarr;
-            </Link>
+            <ScoreBreakdown data={data} />
           </div>
         </div>
       </div>
