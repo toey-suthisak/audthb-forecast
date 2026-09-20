@@ -22,7 +22,17 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 // mean the same thing in both places: a move under NEUTRAL_BAND_PCT is
 // "no real move," baseline is "always predict no move," and MAE is
 // average absolute error against the actual move.
-export const NEUTRAL_BAND_PCT = 0.02;
+//
+// NEUTRAL_BAND_PCT was originally 0.02%, an arbitrary guess -- the
+// actual distribution of |daily move| across all 927 backtest days
+// (computed directly from backtest_daily_rates) is mean 0.394%, median
+// 0.301%, p10 0.047%, p20 0.123%. 0.02% sat below even the quietest 10%
+// of days, so "no real move" was effectively never true and the
+// baseline's own accuracy was an artifact of that (previously ~3-6%).
+// Recalibrated 2026-09-20 to 0.10%, roughly the 15th percentile --
+// genuinely quiet days, not "any day at all." lib/evaluation-data.ts's
+// BASELINE_NEUTRAL_BAND_PCT is kept at the same value on purpose.
+export const NEUTRAL_BAND_PCT = 0.1;
 const MOMENTUM_WINDOW_DAYS = 5;
 
 type Direction = "BULLISH" | "BEARISH" | "NEUTRAL";

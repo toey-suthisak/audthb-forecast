@@ -27,9 +27,15 @@ const MIN_SAMPLE_SIZE = 20;
 // A move smaller than this is treated as "no real move" when deriving
 // the baseline's own direction call from actual_move_pct -- the
 // baseline has no score-based NEUTRAL threshold like the model does,
-// so this stands in for one. Approximate by construction; kept small
-// relative to REFERENCE_DAILY_RANGE_PCT (0.35%) in lib/forecast-data.ts.
-const BASELINE_NEUTRAL_BAND_PCT = 0.02;
+// so this stands in for one.
+//
+// Was 0.02%, an arbitrary guess -- recalibrated 2026-09-20 to 0.10% to
+// match lib/backtest-data.ts's NEUTRAL_BAND_PCT, both derived from the
+// real distribution of |daily move| across the 927-day RBA backtest
+// (mean 0.394%, median 0.301%, p10 0.047%, p20 0.123% -- 0.02% sat below
+// even the quietest 10% of days). Kept in sync with that constant on
+// purpose so "no real move" means the same thing everywhere in the app.
+const BASELINE_NEUTRAL_BAND_PCT = 0.1;
 
 type MatchedOutcomeRow = {
   horizon: string;

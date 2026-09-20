@@ -2,20 +2,28 @@ import "server-only";
 
 // Bump when the forecast rule itself changes -- independent of
 // MODEL_VERSION (lib/dashboard-data.ts), which versions the score
-// model that feeds this rule as an input.
-export const FORECAST_VERSION = "1.0.0";
+// model that feeds this rule as an input. Bumped to 1.0.1 on
+// 2026-09-20 when REFERENCE_DAILY_RANGE_PCT was recalibrated below --
+// this resets Track Record's DAILY sample count to zero for the new
+// version, deliberately: mixing pre/post-recalibration predicted
+// values (and their range checks) under one accuracy number would be
+// incoherent, not just imprecise.
+export const FORECAST_VERSION = "1.0.1";
 
 export const HORIZON_HOURS = 24;
 
-// Derived from the only price history available when this rule was
-// written (2026-09-11 to 2026-09-17, 7 calendar days of AUD/THB
-// intraday high/low): daily range averaged ~0.30% (0.08% to 0.44%).
-// Used as the move-size scale for an otherwise unvalidated linear
-// map from Core FX Score to a predicted daily move. This is a
-// placeholder, not a calibrated estimate -- revisit once
-// forecast_outcomes has enough history to measure actual error
-// against real thresholds instead of guessing one.
-export const REFERENCE_DAILY_RANGE_PCT = 0.35;
+// Originally guessed from just 7 calendar days of AUD/THB history
+// (2026-09-11..17, ~0.30% average daily range) when this rule was
+// first written. Recalibrated 2026-09-20 against the actual 927-day
+// RBA backtest (see backtest_daily_rates): mean absolute daily move is
+// 0.394%, median 0.301%. Still used only as a move-size *scale* for an
+// otherwise unfit linear map from Core FX Score to a predicted move --
+// this fixes the scale to something real, it does not establish that
+// Core FX Score actually predicts direction or magnitude. That
+// requires enough forecast_outcomes history to test score-vs-actual-move
+// correlation directly, which doesn't exist yet (~70 hourly score
+// snapshots as of 2026-09-20, covering 3 days).
+export const REFERENCE_DAILY_RANGE_PCT = 0.39;
 
 export type ForecastDirection = "BULLISH" | "BEARISH" | "NEUTRAL";
 
@@ -50,10 +58,11 @@ export function buildForecast(coreFxScore: number, referenceRate: number | null)
     predictedRangeLowPct: Number((predictedMovePct - REFERENCE_DAILY_RANGE_PCT).toFixed(4)),
     predictedRangeHighPct: Number((predictedMovePct + REFERENCE_DAILY_RANGE_PCT).toFixed(4)),
     methodology:
-      `UNCALIBRATED placeholder: predictedMovePct = (coreFxScore/100) * ${REFERENCE_DAILY_RANGE_PCT}% ` +
-      `(reference daily range from 2026-09-11..17 AUD/THB history, 7 days only). ` +
-      `Direction uses the existing Core FX Score bias thresholds (>=15 BULLISH, <=-15 BEARISH). ` +
-      `Not backtested -- do not treat as a real probability or confidence estimate. ` +
+      `UNCALIBRATED linear formula: predictedMovePct = (coreFxScore/100) * ${REFERENCE_DAILY_RANGE_PCT}% ` +
+      `(move-size scale calibrated against the 927-day RBA backtest's mean absolute daily move, 0.394% -- ` +
+      `see backtest_daily_rates). Direction uses the existing Core FX Score bias thresholds (>=15 BULLISH, ` +
+      `<=-15 BEARISH). The scale is real; whether Core FX Score itself predicts direction or magnitude is ` +
+      `not yet tested -- do not treat this as a real probability or confidence estimate. ` +
       (referenceRate !== null
         ? `Reference rate ${referenceRate} at run time.`
         : "No reference rate was available at run time."),
