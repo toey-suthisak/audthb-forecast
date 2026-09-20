@@ -1,5 +1,23 @@
 import "server-only";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import type { Locale } from "@/lib/i18n";
+
+const STR = {
+  en: {
+    dbError: (msg: string) => `Event calendar DB error: ${msg}`,
+    errorNote: "Hand-maintained calendar, not a live feed -- see supabase/migrations for sources.",
+    coverageNote:
+      "Hand-updated, not a live feed -- covers RBA/Fed/BOT/BOE/BOJ meetings plus AU/US data releases. " +
+      "A quiet week just means nothing's been added yet, not that nothing's scheduled.",
+  },
+  th: {
+    dbError: (msg: string) => `ปฏิทินข่าวเชื่อมต่อฐานข้อมูลผิดพลาด: ${msg}`,
+    errorNote: "ปฏิทินอัปเดตด้วยมือ ไม่ใช่ฟีดสด -- ดูแหล่งข้อมูลใน supabase/migrations",
+    coverageNote:
+      "อัปเดตด้วยมือ ไม่ใช่ฟีดสด -- ครอบคลุมการประชุม RBA/Fed/BOT/BOE/BOJ และการรายงานข้อมูล AU/US " +
+      "สัปดาห์ที่ดูเงียบแค่หมายความว่ายังไม่ได้เพิ่มข้อมูล ไม่ใช่ว่าไม่มีอะไรตามกำหนดการ",
+  },
+} as const;
 
 export type CalendarEvent = {
   eventTime: string;
@@ -42,7 +60,8 @@ function toCalendarEvent(row: DbEventRow): CalendarEvent {
 // Hand-maintained calendar (see supabase/migrations -- no live provider
 // gives this away for free). A gap in coverage means "not seeded yet",
 // not "nothing happening" -- surfaced via coverageNote below.
-export async function getEventCalendar() {
+export async function getEventCalendar(locale: Locale = "th") {
+  const t = STR[locale];
   const now = new Date();
 
   const bangkokOffset = 7 * 60 * 60 * 1000;
@@ -69,9 +88,8 @@ export async function getEventCalendar() {
     return {
       today: [] as CalendarEvent[],
       thisWeek: [] as CalendarEvent[],
-      error: `Event calendar DB error: ${error.message}`,
-      coverageNote:
-        "Hand-maintained calendar, not a live feed -- see supabase/migrations for sources.",
+      error: t.dbError(error.message),
+      coverageNote: t.errorNote,
     };
   }
 
@@ -86,9 +104,7 @@ export async function getEventCalendar() {
     today,
     thisWeek: rows,
     error: null,
-    coverageNote:
-      "Hand-updated, not a live feed -- covers RBA/Fed/BOT/BOE/BOJ meetings plus AU/US data releases. " +
-      "A quiet week just means nothing's been added yet, not that nothing's scheduled.",
+    coverageNote: t.coverageNote,
   };
 }
 

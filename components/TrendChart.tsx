@@ -1,5 +1,6 @@
 import { getScoreHistory } from "@/lib/history-data";
 import StatusLight from "@/components/StatusLight";
+import type { Locale } from "@/lib/i18n";
 
 const CHART_WIDTH = 320;
 const CHART_HEIGHT = 72;
@@ -25,6 +26,29 @@ function buildPath(values: number[], min: number, max: number) {
     .join(" ");
 }
 
+const STR = {
+  en: {
+    title: "7-Day Trend",
+    notEnough: "Not enough history yet.",
+    coreFxScore: "Core FX Score",
+    rate: "AUD/THB Rate",
+    scoreAria: (from: number, to: number) => `Core FX Score trend over the last 7 days, from ${from} to ${to}`,
+    scoreAriaShort: "Core FX Score trend over the last 7 days",
+    rateAria: (from: string, to: string) => `AUD/THB Rate trend over the last 7 days, from ${from} to ${to}`,
+    rateAriaShort: "AUD/THB Rate trend over the last 7 days",
+  },
+  th: {
+    title: "แนวโน้ม 7 วัน",
+    notEnough: "ยังมีข้อมูลย้อนหลังไม่พอ",
+    coreFxScore: "Core FX Score",
+    rate: "อัตรา AUD/THB",
+    scoreAria: (from: number, to: number) => `แนวโน้ม Core FX Score ช่วง 7 วันที่ผ่านมา จาก ${from} ถึง ${to}`,
+    scoreAriaShort: "แนวโน้ม Core FX Score ช่วง 7 วันที่ผ่านมา",
+    rateAria: (from: string, to: string) => `แนวโน้มอัตรา AUD/THB ช่วง 7 วันที่ผ่านมา จาก ${from} ถึง ${to}`,
+    rateAriaShort: "แนวโน้มอัตรา AUD/THB ช่วง 7 วันที่ผ่านมา",
+  },
+} as const;
+
 // A plain SVG sparkline -- one series per chart (score and rate live on
 // different scales, so this is two single-axis charts, never one chart
 // with two y-axes). The zero line only makes sense for the score, which
@@ -34,16 +58,18 @@ function Sparkline({
   colorClassName,
   zeroLine = false,
   ariaLabel,
+  notEnoughLabel,
 }: {
   values: number[];
   colorClassName: string;
   zeroLine?: boolean;
   ariaLabel: string;
+  notEnoughLabel: string;
 }) {
   if (values.length < 2) {
     return (
       <div className="h-[72px] flex items-center">
-        <p className="text-xs text-stone-600 dark:text-stone-400">Not enough history yet.</p>
+        <p className="text-xs text-stone-600 dark:text-stone-400">{notEnoughLabel}</p>
       </div>
     );
   }
@@ -96,8 +122,9 @@ function Sparkline({
 // dashboard is a point-in-time number, so there was previously no way
 // to see whether the score or rate is trending, only where it stands
 // right now.
-export default async function TrendChart() {
+export default async function TrendChart({ locale }: { locale: Locale }) {
   const history = await getScoreHistory();
+  const t = STR[locale];
 
   const scored = history.points.filter(
     (p): p is { issuedAt: string; coreFxScore: number; rate: number | null } => p.coreFxScore !== null,
@@ -111,7 +138,7 @@ export default async function TrendChart() {
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-xl font-semibold tracking-tight inline-flex items-center">
           <StatusLight colorClassName="text-brass-500 dark:text-brass-400" />
-          7-Day Trend
+          {t.title}
         </h2>
         {scored.length >= 2 && (
           <p className="text-xs text-stone-600 dark:text-stone-400">
@@ -126,7 +153,7 @@ export default async function TrendChart() {
         <div className="grid sm:grid-cols-2 gap-6 mt-4">
           <div>
             <div className="flex items-baseline justify-between">
-              <p className="text-xs text-stone-600 dark:text-stone-400 uppercase tracking-wide">Core FX Score</p>
+              <p className="text-xs text-stone-600 dark:text-stone-400 uppercase tracking-wide">{t.coreFxScore}</p>
               {scored.length > 0 && (
                 <p className="text-sm font-mono font-semibold">
                   {scored.at(-1)!.coreFxScore > 0 ? "+" : ""}
@@ -138,17 +165,18 @@ export default async function TrendChart() {
               values={scored.map((p) => p.coreFxScore)}
               colorClassName="text-brass-600 dark:text-brass-400"
               zeroLine
+              notEnoughLabel={t.notEnough}
               ariaLabel={
                 scored.length >= 2
-                  ? `Core FX Score trend over the last 7 days, from ${scored[0].coreFxScore} to ${scored.at(-1)!.coreFxScore}`
-                  : "Core FX Score trend over the last 7 days"
+                  ? t.scoreAria(scored[0].coreFxScore, scored.at(-1)!.coreFxScore)
+                  : t.scoreAriaShort
               }
             />
           </div>
 
           <div>
             <div className="flex items-baseline justify-between">
-              <p className="text-xs text-stone-600 dark:text-stone-400 uppercase tracking-wide">AUD/THB Rate</p>
+              <p className="text-xs text-stone-600 dark:text-stone-400 uppercase tracking-wide">{t.rate}</p>
               {rated.length > 0 && (
                 <p className="text-sm font-mono font-semibold">{rated.at(-1)!.rate.toFixed(4)}</p>
               )}
@@ -156,10 +184,11 @@ export default async function TrendChart() {
             <Sparkline
               values={rated.map((p) => p.rate)}
               colorClassName="text-stone-500 dark:text-stone-400"
+              notEnoughLabel={t.notEnough}
               ariaLabel={
                 rated.length >= 2
-                  ? `AUD/THB Rate trend over the last 7 days, from ${rated[0].rate.toFixed(4)} to ${rated.at(-1)!.rate.toFixed(4)}`
-                  : "AUD/THB Rate trend over the last 7 days"
+                  ? t.rateAria(rated[0].rate.toFixed(4), rated.at(-1)!.rate.toFixed(4))
+                  : t.rateAriaShort
               }
             />
           </div>

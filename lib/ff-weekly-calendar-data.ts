@@ -1,5 +1,11 @@
 import "server-only";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import type { Locale } from "@/lib/i18n";
+
+const STR = {
+  en: { dbError: (msg: string) => `Weekly calendar DB error: ${msg}` },
+  th: { dbError: (msg: string) => `ปฏิทินรายสัปดาห์เชื่อมต่อฐานข้อมูลผิดพลาด: ${msg}` },
+} as const;
 
 // Full, unfiltered copy of ForexFactory's weekly calendar -- every
 // currency and impact level. See supabase migration
@@ -109,7 +115,7 @@ function toFfCalendarEvent(row: DbRow): FfCalendarEvent {
   };
 }
 
-export async function getFfWeeklyCalendar(): Promise<{
+export async function getFfWeeklyCalendar(locale: Locale = "th"): Promise<{
   byDate: { date: string; events: FfCalendarEvent[] }[];
   fetchedAt: string | null;
   error: string | null;
@@ -120,7 +126,7 @@ export async function getFfWeeklyCalendar(): Promise<{
     .order("event_date", { ascending: true });
 
   if (error) {
-    return { byDate: [], fetchedAt: null, error: `Weekly calendar DB error: ${error.message}` };
+    return { byDate: [], fetchedAt: null, error: STR[locale].dbError(error.message) };
   }
 
   const rows = (data ?? []) as (DbRow & { fetched_at: string })[];

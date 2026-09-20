@@ -3,6 +3,7 @@ import type { DashboardData, FreshnessStatus } from "@/lib/dashboard-data";
 import { getMacroCompositeData } from "@/lib/macro-composite-data";
 import { getEventRisk } from "@/lib/event-calendar-data";
 import { getRecentNewsSignals } from "@/lib/news-sentiment-data";
+import { tLabel, type Locale } from "@/lib/i18n";
 
 // Surfaces "is a feed/job actually working right now" alerts, distinct
 // from DataHealth (which only covers the 3 core FX rates). There is no
@@ -19,55 +20,125 @@ export type Alert = {
   detail: string;
 };
 
+const STR = {
+  en: {
+    missing: "No data returned at all -- the feed or its ingest job is not producing rows.",
+    stale: (age: string) => `Data is stale (${age}) -- ingest cron may have failed, or the provider stopped responding.`,
+    ageOld: (v: number, unit: string) => `${v} ${unit} old`,
+    ageUnknown: "age unknown",
+    yieldStale: (status: string, gap: string) =>
+      `Yield spread data is ${status} (gap: ${gap} days) -- DBnomics sync may have failed.`,
+    macroNoData: "No usable data this run -- excluded from Macro Score, other Macro components unaffected.",
+    eventLabel: (name: string) => `Event Risk: ${name}`,
+    eventDetail: (currency: string, hours: string, level: string) =>
+      `${currency} -- in ${hours} (${level}) -- expect volatility, treat the Core FX Score with extra caution.`,
+    newsLabel: (title: string) => `News Signal: ${title}`,
+    min: "min",
+    hr: "hr",
+    labels: {
+      direct: "AUD/THB direct",
+      audUsd: "AUD/USD",
+      usdThb: "USD/THB",
+      usdCnh: "USD/CNH",
+      usdSgd: "USD/SGD",
+      gold: "Gold",
+      brent: "Brent (live)",
+      ironOre: "Iron Ore",
+      risk: "Risk / VIXY",
+      yield: "AU-US 2Y Yield",
+      macroPolicy: "Macro: Policy (RBA/Fed/BOT)",
+      macroInflation: "Macro: Inflation",
+      macroLabour: "Macro: Labour",
+      macroGrowth: "Macro: Growth (GDP, experimental)",
+    },
+  },
+  th: {
+    missing: "ไม่มีข้อมูลส่งกลับมาเลย -- ฟีดหรือ ingest job ไม่ได้สร้างข้อมูล",
+    stale: (age: string) => `ข้อมูลเก่า (${age}) -- ingest cron อาจล้มเหลว หรือผู้ให้บริการหยุดตอบสนอง`,
+    ageOld: (v: number, unit: string) => `${v} ${unit}ที่แล้ว`,
+    ageUnknown: "ไม่ทราบอายุข้อมูล",
+    yieldStale: (status: string, gap: string) =>
+      `ข้อมูลส่วนต่างผลตอบแทนพันธบัตร${status} (ห่างไป: ${gap} วัน) -- การซิงค์ DBnomics อาจล้มเหลว`,
+    macroNoData: "ไม่มีข้อมูลที่ใช้ได้ในรอบนี้ -- ถูกตัดออกจาก Macro Score ส่วนอื่นของ Macro ไม่กระทบ",
+    eventLabel: (name: string) => `ความเสี่ยงจากข่าว: ${name}`,
+    eventDetail: (currency: string, hours: string, level: string) =>
+      `${currency} -- ในอีก ${hours} (${level}) -- คาดว่าจะผันผวน ควรใช้ Core FX Score ด้วยความระมัดระวังเป็นพิเศษ`,
+    newsLabel: (title: string) => `สัญญาณข่าว: ${title}`,
+    min: "นาที",
+    hr: "ชม.",
+    labels: {
+      direct: "AUD/THB โดยตรง",
+      audUsd: "AUD/USD",
+      usdThb: "USD/THB",
+      usdCnh: "USD/CNH",
+      usdSgd: "USD/SGD",
+      gold: "ทองคำ",
+      brent: "น้ำมันเบรนท์ (เรียลไทม์)",
+      ironOre: "แร่เหล็ก",
+      risk: "ความเสี่ยง / VIXY",
+      yield: "ส่วนต่างผลตอบแทนพันธบัตร AU-US 2 ปี",
+      macroPolicy: "Macro: นโยบาย (RBA/Fed/BOT)",
+      macroInflation: "Macro: เงินเฟ้อ",
+      macroLabour: "Macro: แรงงาน",
+      macroGrowth: "Macro: การเติบโต (GDP, ทดลอง)",
+    },
+  },
+} as const;
+
 function freshnessAlert(
   label: string,
   status: FreshnessStatus | "FRESH" | "DELAYED" | "STALE" | "MISSING",
   ageValue: number | null,
-  unit: "min" | "hr" = "min",
+  unit: "min" | "hr",
+  t: (typeof STR)[Locale],
 ): Alert | null {
   if (status === "MISSING") {
     return {
       severity: "critical",
       label,
-      detail: "No data returned at all -- the feed or its ingest job is not producing rows.",
+      detail: t.missing,
     };
   }
 
   if (status === "STALE") {
-    const age = ageValue !== null ? `${ageValue} ${unit} old` : "age unknown";
+    const unitLabel = unit === "min" ? t.min : t.hr;
+    const age = ageValue !== null ? t.ageOld(ageValue, unitLabel) : t.ageUnknown;
     return {
       severity: "warning",
       label,
-      detail: `Data is stale (${age}) -- ingest cron may have failed, or the provider stopped responding.`,
+      detail: t.stale(age),
     };
   }
 
   return null;
 }
 
-export async function getAlerts(data: DashboardData): Promise<Alert[]> {
-  const candidates: Array<Alert | null> = [
-    freshnessAlert("AUD/THB direct", data.directFreshness.status, data.directFreshness.ageMinutes),
-    freshnessAlert("AUD/USD", data.audUsdFreshness.status, data.audUsdFreshness.ageMinutes),
-    freshnessAlert("USD/THB", data.usdThbFreshness.status, data.usdThbFreshness.ageMinutes),
-    freshnessAlert("USD/CNH", data.usdCnhFreshness.status, data.usdCnhFreshness.ageMinutes),
-    freshnessAlert("USD/SGD", data.usdSgdFreshness.status, data.usdSgdFreshness.ageMinutes),
+export async function getAlerts(data: DashboardData, locale: Locale = "th"): Promise<Alert[]> {
+  const t = STR[locale];
+  const l = t.labels;
 
-    freshnessAlert("Gold", data.goldFreshness, data.goldAgeMinutes),
-    freshnessAlert("Brent (live)", data.brentLiveFreshness, data.brentLiveAgeMinutes),
-    freshnessAlert("Iron Ore", data.ironOreFreshness, data.ironOreAgeHours, "hr"),
+  const candidates: Array<Alert | null> = [
+    freshnessAlert(l.direct, data.directFreshness.status, data.directFreshness.ageMinutes, "min", t),
+    freshnessAlert(l.audUsd, data.audUsdFreshness.status, data.audUsdFreshness.ageMinutes, "min", t),
+    freshnessAlert(l.usdThb, data.usdThbFreshness.status, data.usdThbFreshness.ageMinutes, "min", t),
+    freshnessAlert(l.usdCnh, data.usdCnhFreshness.status, data.usdCnhFreshness.ageMinutes, "min", t),
+    freshnessAlert(l.usdSgd, data.usdSgdFreshness.status, data.usdSgdFreshness.ageMinutes, "min", t),
+
+    freshnessAlert(l.gold, data.goldFreshness, data.goldAgeMinutes, "min", t),
+    freshnessAlert(l.brent, data.brentLiveFreshness, data.brentLiveAgeMinutes, "min", t),
+    freshnessAlert(l.ironOre, data.ironOreFreshness, data.ironOreAgeHours, "hr", t),
   ];
 
   // MARKET_CLOSED is an expected state for Risk/VIXY outside market hours -- not an alert.
   if (data.riskFreshness !== "MARKET_CLOSED") {
-    candidates.push(freshnessAlert("Risk / VIXY", data.riskFreshness, data.riskAgeMinutes));
+    candidates.push(freshnessAlert(l.risk, data.riskFreshness, data.riskAgeMinutes, "min", t));
   }
 
   if (data.yieldConfidence === "STALE" || data.yieldConfidence === "MISSING") {
     candidates.push({
       severity: data.yieldConfidence === "MISSING" ? "critical" : "warning",
-      label: "AU-US 2Y Yield",
-      detail: `Yield spread data is ${data.yieldConfidence.toLowerCase()} (gap: ${data.yieldDataGapDays ?? "unknown"} days) -- DBnomics sync may have failed.`,
+      label: l.yield,
+      detail: t.yieldStale(tLabel(data.yieldConfidence, locale).toLowerCase(), String(data.yieldDataGapDays ?? "?")),
     });
   }
 
@@ -76,10 +147,10 @@ export async function getAlerts(data: DashboardData): Promise<Alert[]> {
   // of this run's Macro Score rather than the whole category failing.
   const macro = await getMacroCompositeData();
   const macroChecks: Array<{ label: string; coverage: number }> = [
-    { label: "Macro: Policy (RBA/Fed/BOT)", coverage: macro.policy.coverage },
-    { label: "Macro: Inflation", coverage: macro.inflation.coverage },
-    { label: "Macro: Labour", coverage: macro.labour.coverage },
-    { label: "Macro: Growth (GDP, experimental)", coverage: macro.growth.coverage },
+    { label: l.macroPolicy, coverage: macro.policy.coverage },
+    { label: l.macroInflation, coverage: macro.inflation.coverage },
+    { label: l.macroLabour, coverage: macro.labour.coverage },
+    { label: l.macroGrowth, coverage: macro.growth.coverage },
   ];
 
   for (const check of macroChecks) {
@@ -87,7 +158,7 @@ export async function getAlerts(data: DashboardData): Promise<Alert[]> {
       candidates.push({
         severity: "warning",
         label: check.label,
-        detail: "No usable data this run -- excluded from Macro Score, other Macro components unaffected.",
+        detail: t.macroNoData,
       });
     }
   }
@@ -98,11 +169,14 @@ export async function getAlerts(data: DashboardData): Promise<Alert[]> {
   // along here rather than only living in Hero's smaller caveat banner.
   const eventRisk = await getEventRisk();
   if (eventRisk.level !== "NONE" && eventRisk.event && eventRisk.hoursUntil !== null) {
-    const hoursLabel = eventRisk.hoursUntil < 1 ? `${Math.round(eventRisk.hoursUntil * 60)} min` : `${eventRisk.hoursUntil.toFixed(1)}h`;
+    const hoursLabel =
+      eventRisk.hoursUntil < 1
+        ? `${Math.round(eventRisk.hoursUntil * 60)} ${t.min}`
+        : `${eventRisk.hoursUntil.toFixed(1)} ${locale === "th" ? "ชม." : "h"}`;
     candidates.push({
       severity: eventRisk.level === "HIGH" ? "critical" : "warning",
-      label: `Event Risk: ${eventRisk.event.eventName}`,
-      detail: `${eventRisk.event.currency} -- in ${hoursLabel} (${eventRisk.level}) -- expect volatility, treat the Core FX Score with extra caution.`,
+      label: t.eventLabel(eventRisk.event.eventName),
+      detail: t.eventDetail(eventRisk.event.currency, hoursLabel, tLabel(eventRisk.level, locale)),
     });
   }
 
@@ -123,7 +197,7 @@ export async function getAlerts(data: DashboardData): Promise<Alert[]> {
   if (recentHighImpact) {
     candidates.push({
       severity: "warning",
-      label: `News Signal: ${recentHighImpact.title}`,
+      label: t.newsLabel(recentHighImpact.title),
       detail: `${recentHighImpact.aiDirection.replace("_", " ")} -- ${recentHighImpact.aiRationale}`,
     });
   }

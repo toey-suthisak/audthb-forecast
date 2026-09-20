@@ -5,6 +5,7 @@ import type {
 import StatusBadge, { type BadgeTone } from "@/components/StatusBadge";
 import StatusLight from "@/components/StatusLight";
 import Figure from "@/components/Figure";
+import { freshnessLabel, tLabel, type Locale } from "@/lib/i18n";
 
 function formatTime(timestamp: string) {
   return new Date(timestamp).toLocaleString(
@@ -26,30 +27,46 @@ const FRESHNESS_TONE: Record<FreshnessInfo["status"], BadgeTone> = {
   MISSING: "red",
 };
 
-const FRESHNESS_LABEL: Record<FreshnessInfo["status"], string> = {
-  FRESH: "LIVE",
-  DELAYED: "DELAYED",
-  STALE: "STALE",
-  MARKET_CLOSED: "MARKET CLOSED",
-  MISSING: "NO DATA",
-};
+const STR = {
+  en: {
+    title: "Market Rates",
+    direct: "AUD/THB Direct",
+    cross: "AUD/THB Cross",
+    matched: "Matched:",
+    sourceGap: "Source gap:",
+    min: "min ago",
+    minSuffix: "min",
+  },
+  th: {
+    title: "อัตราแลกเปลี่ยนตลาด",
+    direct: "AUD/THB โดยตรง",
+    cross: "AUD/THB แบบ Cross",
+    matched: "จับคู่เวลา:",
+    sourceGap: "ช่องว่างแหล่งข้อมูล:",
+    min: "นาทีที่แล้ว",
+    minSuffix: "นาที",
+  },
+} as const;
 
 function FreshnessBadge({
   freshness,
+  locale,
 }: {
   freshness: FreshnessInfo;
+  locale: Locale;
 }) {
+  const t = STR[locale];
   return (
     <div className="mt-2 space-y-1">
       <StatusBadge
-        label={FRESHNESS_LABEL[freshness.status]}
+        label={freshnessLabel(freshness.status, locale)}
         tone={FRESHNESS_TONE[freshness.status]}
       />
 
       {freshness.ageMinutes !== null &&
         freshness.status !== "MARKET_CLOSED" && (
           <p className="text-xs text-stone-600 dark:text-stone-400">
-            {freshness.ageMinutes.toFixed(0)} min ago
+            {freshness.ageMinutes.toFixed(0)} {t.min}
           </p>
         )}
     </div>
@@ -58,14 +75,18 @@ function FreshnessBadge({
 
 export default function MarketRates({
   data,
+  locale,
 }: {
   data: DashboardData;
+  locale: Locale;
 }) {
+  const t = STR[locale];
+
   return (
     <div className="p-6">
       <h2 className="text-xl font-semibold tracking-tight inline-flex items-center">
         <StatusLight colorClassName="text-brass-500 dark:text-brass-400" />
-        Market Rates
+        {t.title}
       </h2>
 
       <div className="grid grid-cols-2 gap-6 mt-5">
@@ -73,7 +94,7 @@ export default function MarketRates({
         {/* AUD/THB DIRECT */}
         <div>
           <p className="text-stone-600 dark:text-stone-400 text-sm">
-            AUD/THB Direct
+            {t.direct}
           </p>
 
           <Figure
@@ -91,13 +112,14 @@ export default function MarketRates({
 
           <FreshnessBadge
             freshness={data.directFreshness}
+            locale={locale}
           />
         </div>
 
         {/* AUD/THB CROSS */}
         <div>
           <p className="text-stone-600 dark:text-stone-400 text-sm">
-            AUD/THB Cross
+            {t.cross}
           </p>
 
           <Figure
@@ -107,14 +129,14 @@ export default function MarketRates({
 
           {data.crossTimestamp && (
             <p className="text-xs text-stone-600 dark:text-stone-400 mt-2">
-              Matched:{" "}
+              {t.matched}{" "}
               {formatTime(data.crossTimestamp)}
             </p>
           )}
 
           <div className="mt-2">
             <StatusBadge
-              label={data.crossStatus}
+              label={tLabel(data.crossStatus, locale)}
               tone={
                 data.crossStatus === "GOOD"
                   ? "emerald"
@@ -127,8 +149,8 @@ export default function MarketRates({
 
           {data.crossTimeGapMinutes !== null && (
             <p className="text-xs text-stone-600 dark:text-stone-400 mt-1">
-              Source gap:{" "}
-              {data.crossTimeGapMinutes.toFixed(1)} min
+              {t.sourceGap}{" "}
+              {data.crossTimeGapMinutes.toFixed(1)} {t.minSuffix}
             </p>
           )}
         </div>
@@ -154,6 +176,7 @@ export default function MarketRates({
 
           <FreshnessBadge
             freshness={data.audUsdFreshness}
+            locale={locale}
           />
         </div>
 
@@ -178,6 +201,7 @@ export default function MarketRates({
 
           <FreshnessBadge
             freshness={data.usdThbFreshness}
+            locale={locale}
           />
         </div>
       </div>

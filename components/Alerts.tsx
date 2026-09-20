@@ -3,8 +3,14 @@
 import { useEffect, useState } from "react";
 import type { Alert } from "@/lib/alerts-data";
 import StatusLight from "@/components/StatusLight";
+import type { Locale } from "@/lib/i18n";
 
 const DISMISSED_KEY = "dismissedAlertsKey";
+
+const STR = {
+  en: { title: "Alerts", critical: "Critical", warning: "Warning", dismiss: "Dismiss alerts" },
+  th: { title: "การแจ้งเตือน", critical: "วิกฤต", warning: "คำเตือน", dismiss: "ปิดการแจ้งเตือน" },
+} as const;
 
 // Identifies "this exact set of alerts", not just "any alert" -- so
 // dismissing today's BOJ event-risk alert doesn't also silently swallow
@@ -27,7 +33,8 @@ function CloseIcon() {
 // conveys health via feed-freshness dots and the Confidence badge), and
 // when there is, the user can close it without it coming back for the
 // exact same alerts on the next page load.
-export default function Alerts({ alerts }: { alerts: Alert[] }) {
+export default function Alerts({ alerts, locale }: { alerts: Alert[]; locale: Locale }) {
+  const t = STR[locale];
   const [visible, setVisible] = useState(false);
   const [entered, setEntered] = useState(false);
   // What's actually on screen, captured at the moment it's shown --
@@ -85,21 +92,21 @@ export default function Alerts({ alerts }: { alerts: Alert[] }) {
         <button
           type="button"
           onClick={dismiss}
-          aria-label="Dismiss alerts"
+          aria-label={t.dismiss}
           className="absolute top-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-full text-stone-600 dark:text-stone-400 hover:bg-black/5 dark:hover:bg-white/10 hover:text-stone-700 dark:hover:text-stone-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brass-400"
         >
           <CloseIcon />
         </button>
 
         <div className="flex flex-wrap items-center justify-between gap-3 pr-8">
-          <p className="font-semibold">Alerts</p>
+          <p className="font-semibold">{t.title}</p>
 
           <div className="flex gap-4 text-sm">
             {criticalCount > 0 && (
-              <span className="text-red-700 dark:text-red-400">{criticalCount} Critical</span>
+              <span className="text-red-700 dark:text-red-400">{criticalCount} {t.critical}</span>
             )}
             {warningCount > 0 && (
-              <span className="text-amber-700 dark:text-amber-400">{warningCount} Warning</span>
+              <span className="text-amber-700 dark:text-amber-400">{warningCount} {t.warning}</span>
             )}
           </div>
         </div>

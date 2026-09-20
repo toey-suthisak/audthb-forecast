@@ -3,6 +3,7 @@ import Link from "next/link";
 import RefreshControls from "@/components/RefreshControls";
 import StickyBar from "@/components/StickyBar";
 import ThemeToggle from "@/components/ThemeToggle";
+import LanguageToggle from "@/components/LanguageToggle";
 import Hero from "@/components/Hero";
 import MarketRates from "@/components/MarketRates";
 import CrossCheck from "@/components/CrossCheck";
@@ -16,6 +17,9 @@ import Evaluation from "@/components/Evaluation";
 import BacktestPreview from "@/components/BacktestPreview";
 import TrendChart from "@/components/TrendChart";
 import ActionSummary from "@/components/ActionSummary";
+
+import { getLocale } from "@/lib/i18n-server";
+import type { Locale } from "@/lib/i18n";
 
 import {
   getDashboardData,
@@ -62,19 +66,91 @@ const SECTION_COLOR_CLASSES: Record<SectionColor, string> = {
   amber: "text-amber-600 dark:text-amber-400",
 };
 
+const PAGE_STRINGS = {
+  en: {
+    title: "AUD/THB Forecast Dashboard",
+    live: "Live",
+    market: "Market",
+    contextNews: "Context & News",
+    sources: "Sources",
+    sourceFxData: "FX Market Data:",
+    sourceFxDataValue: "Twelve Data",
+    sourceCross: "AUD/THB Cross:",
+    sourceCrossValue: "AUD/USD × USD/THB (matched-time)",
+    sourceRelative: "Relative Asian FX:",
+    sourceRelativeValue: "USD/CNH and USD/SGD via Twelve Data",
+    sourceAuYield: "AU 2Y Yield:",
+    sourceAuYieldValue: "RBA via DBnomics",
+    sourceUsYield: "US 2Y Yield:",
+    sourceUsYieldValue: "Federal Reserve via DBnomics",
+    sourceIronOre: "Iron Ore:",
+    sourceIronOreValue: "OilPriceAPI",
+    sourceBrentLive: "Brent Live:",
+    sourceBrentLiveValue: "OilPriceAPI",
+    sourceBrentHist: "Brent Historical Reference:",
+    sourceBrentHistValue: "EIA",
+    sourceGold: "Gold:",
+    sourceGoldValue: "Gold-API",
+    sourceRisk: "Risk / Volatility:",
+    sourceRiskValue: "VIXY via Twelve Data",
+    sourceNews: "News Signals:",
+    sourceNewsValue: "Alpha Vantage News + Google Gemini",
+    sourceYahoo: "AUD/THB Reference (comparison only):",
+    sourceYahooValue: "Yahoo Finance (unofficial)",
+    disclaimer: "AUD/THB Forecast Dashboard -- for research and monitoring purposes only, not financial advice.",
+    systemStatus: "System status",
+    session: { asia: "Asian session", london: "London session", ny: "New York session" },
+  },
+  th: {
+    title: "แดชบอร์ดพยากรณ์ AUD/THB",
+    live: "ถ่ายทอดสด",
+    market: "ตลาด",
+    contextNews: "ข่าวและบริบท",
+    sources: "แหล่งข้อมูล",
+    sourceFxData: "ข้อมูลตลาด FX:",
+    sourceFxDataValue: "Twelve Data",
+    sourceCross: "AUD/THB แบบ Cross:",
+    sourceCrossValue: "AUD/USD × USD/THB (จับคู่เวลา)",
+    sourceRelative: "ค่าเงินเอเชียที่เกี่ยวข้อง:",
+    sourceRelativeValue: "USD/CNH และ USD/SGD ผ่าน Twelve Data",
+    sourceAuYield: "ผลตอบแทนพันธบัตรออสเตรเลีย 2 ปี:",
+    sourceAuYieldValue: "RBA ผ่าน DBnomics",
+    sourceUsYield: "ผลตอบแทนพันธบัตรสหรัฐ 2 ปี:",
+    sourceUsYieldValue: "Federal Reserve ผ่าน DBnomics",
+    sourceIronOre: "แร่เหล็ก:",
+    sourceIronOreValue: "OilPriceAPI",
+    sourceBrentLive: "น้ำมันเบรนท์ (เรียลไทม์):",
+    sourceBrentLiveValue: "OilPriceAPI",
+    sourceBrentHist: "น้ำมันเบรนท์ (ข้อมูลย้อนหลังอ้างอิง):",
+    sourceBrentHistValue: "EIA",
+    sourceGold: "ทองคำ:",
+    sourceGoldValue: "Gold-API",
+    sourceRisk: "ความเสี่ยง / ความผันผวน:",
+    sourceRiskValue: "VIXY ผ่าน Twelve Data",
+    sourceNews: "สัญญาณข่าว:",
+    sourceNewsValue: "Alpha Vantage News + Google Gemini",
+    sourceYahoo: "AUD/THB อ้างอิง (ใช้เปรียบเทียบเท่านั้น):",
+    sourceYahooValue: "Yahoo Finance (ไม่เป็นทางการ)",
+    disclaimer: "แดชบอร์ดพยากรณ์ AUD/THB -- ใช้เพื่อการวิจัยและติดตามเท่านั้น ไม่ใช่คำแนะนำทางการเงิน",
+    systemStatus: "สถานะระบบ",
+    session: { asia: "ช่วงตลาดเอเชีย", london: "ช่วงตลาดลอนดอน", ny: "ช่วงตลาดนิวยอร์ก" },
+  },
+} as const;
+
 // A very quiet nod to which FX session is live right now -- no longer
 // named in text next to the masthead's clock (removed 2026-09-20: it
 // read as misleading when shown next to a MARKET_CLOSED badge), just a
 // barely-there change in the rule line beneath it. Bangkok-hour
 // buckets, not a precise open/close model.
-function marketSession(bangkokHour: number): { label: string; ruleClassName: string } {
+function marketSession(bangkokHour: number, locale: Locale): { label: string; ruleClassName: string } {
+  const s = PAGE_STRINGS[locale].session;
   if (bangkokHour >= 6 && bangkokHour < 14) {
-    return { label: "Asian session", ruleClassName: "border-brass-900/25" };
+    return { label: s.asia, ruleClassName: "border-brass-900/25" };
   }
   if (bangkokHour >= 14 && bangkokHour < 20) {
-    return { label: "London session", ruleClassName: "border-brass-900/45" };
+    return { label: s.london, ruleClassName: "border-brass-900/45" };
   }
-  return { label: "New York session", ruleClassName: "border-brass-900/65" };
+  return { label: s.ny, ruleClassName: "border-brass-900/65" };
 }
 
 function TrendIcon() {
@@ -112,17 +188,20 @@ function SectionLabel({
 }
 
 export default async function Home() {
+  const locale = await getLocale();
+  const s = PAGE_STRINGS[locale];
+
   const data =
     await getDashboardData();
 
   const eventCalendar =
-    await getEventCalendar();
+    await getEventCalendar(locale);
 
   const economicConsensus =
     await getEconomicConsensus();
 
   const alerts =
-    await getAlerts(data);
+    await getAlerts(data, locale);
 
   const dailyRecap =
     await getDailyRecap();
@@ -133,9 +212,9 @@ export default async function Home() {
   const bangkokHour = Number(
     new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Bangkok", hour: "2-digit", hour12: false }).format(new Date()),
   );
-  const session = marketSession(bangkokHour);
+  const session = marketSession(bangkokHour, locale);
 
-  const today = new Date().toLocaleDateString("en-GB", {
+  const today = new Date().toLocaleDateString(locale === "th" ? "th-TH" : "en-GB", {
     timeZone: "Asia/Bangkok",
     weekday: "long",
     day: "numeric",
@@ -152,6 +231,7 @@ export default async function Home() {
         score={data.coreFxScore}
         bias={data.coreBias}
         freshnessStatus={data.latestPriceFreshness.status}
+        locale={locale}
       />
 
       {/* MASTHEAD -- the almanac's title band: a fixed near-black band
@@ -164,7 +244,7 @@ export default async function Home() {
             <p className="text-xs font-medium uppercase tracking-widest text-brass-400">{today}</p>
 
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mt-2 text-white">
-              AUD/THB Forecast Dashboard
+              {s.title}
             </h1>
 
             <div className="flex items-center gap-2 mt-1.5">
@@ -173,14 +253,17 @@ export default async function Home() {
               </span>
 
               <span className="text-xs font-medium uppercase tracking-widest text-emerald-400">
-                Live
+                {s.live}
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
-            <MarketClock variant="inverted" />
-            <ThemeToggle variant="inverted" />
+            <MarketClock variant="inverted" locale={locale} />
+            <div className="flex items-center gap-2">
+              <LanguageToggle locale={locale} variant="inverted" />
+              <ThemeToggle variant="inverted" />
+            </div>
           </div>
         </div>
       </div>
@@ -188,7 +271,7 @@ export default async function Home() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {/* ALERTS */}
 
-        <Alerts alerts={alerts} />
+        <Alerts alerts={alerts} locale={locale} />
 
         {/* THE LEDGER -- the whole page's content is one continuous ruled
         sheet, not a grid of separately-bordered cards: every topic below
@@ -203,40 +286,40 @@ export default async function Home() {
           {/* MARKET */}
           <div>
             <div className="px-6 pt-6">
-              <SectionLabel color="brass" icon={<TrendIcon />}>Market</SectionLabel>
+              <SectionLabel color="brass" icon={<TrendIcon />}>{s.market}</SectionLabel>
             </div>
-            <Hero data={data} />
+            <Hero data={data} locale={locale} />
             <div className="px-6 pb-6 -mt-4">
-              <ActionSummary data={data} />
+              <ActionSummary data={data} locale={locale} />
             </div>
           </div>
 
           <div className="grid lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-stone-200 dark:divide-stone-800">
-            <DailyRecap recap={dailyRecap} data={data} />
-            <MarketRates data={data} />
-            <CrossCheck data={data} />
+            <DailyRecap recap={dailyRecap} data={data} locale={locale} />
+            <MarketRates data={data} locale={locale} />
+            <CrossCheck data={data} locale={locale} />
           </div>
 
-          <TrendChart />
+          <TrendChart locale={locale} />
 
           {/* TRACK RECORD */}
-          <Evaluation />
+          <Evaluation locale={locale} />
 
           {/* BACKTEST -- a different question from Track Record above:
           historical price-only strategies against RBA's free daily
           series, not a replay of the live model. */}
-          <BacktestPreview />
+          <BacktestPreview locale={locale} />
 
           {/* CONTEXT & NEWS */}
           <div className="px-6 pt-6">
-            <SectionLabel color="amber" icon={<CalendarIcon />}>Context &amp; News</SectionLabel>
+            <SectionLabel color="amber" icon={<CalendarIcon />}>{s.contextNews}</SectionLabel>
           </div>
 
-          <TodayEvents today={eventCalendar.today} coverageNote={eventCalendar.coverageNote} />
+          <TodayEvents today={eventCalendar.today} coverageNote={eventCalendar.coverageNote} locale={locale} />
 
           <div className="grid lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-stone-200 dark:divide-stone-800">
-            <MarketConsensus consensus={economicConsensus.events} />
-            <NewsSentiment signals={newsSentiment.signals} error={newsSentiment.error} />
+            <MarketConsensus consensus={economicConsensus.events} locale={locale} />
+            <NewsSentiment signals={newsSentiment.signals} error={newsSentiment.error} locale={locale} />
           </div>
 
           {/* SOURCES -- reference material, not a live signal, so this row
@@ -245,76 +328,76 @@ export default async function Home() {
 
           <div className="p-6">
             <h2 className="text-sm font-semibold tracking-tight text-stone-600 dark:text-stone-400">
-              Sources
+              {s.sources}
             </h2>
 
             <div className="mt-4 text-sm text-stone-600 dark:text-stone-400 grid sm:grid-cols-2 gap-x-8 gap-y-2">
             <p>
-              FX Market Data:{" "}
-              <span className="text-stone-700 dark:text-stone-300">Twelve Data</span>
+              {s.sourceFxData}{" "}
+              <span className="text-stone-700 dark:text-stone-300">{s.sourceFxDataValue}</span>
             </p>
 
             <p>
-              AUD/THB Cross:{" "}
+              {s.sourceCross}{" "}
               <span className="text-stone-700 dark:text-stone-300">
-                AUD/USD × USD/THB (matched-time)
+                {s.sourceCrossValue}
               </span>
             </p>
 
             <p>
-              Relative Asian FX:{" "}
+              {s.sourceRelative}{" "}
               <span className="text-stone-700 dark:text-stone-300">
-                USD/CNH and USD/SGD via Twelve Data
+                {s.sourceRelativeValue}
               </span>
             </p>
 
             <p>
-              AU 2Y Yield:{" "}
-              <span className="text-stone-700 dark:text-stone-300">RBA via DBnomics</span>
+              {s.sourceAuYield}{" "}
+              <span className="text-stone-700 dark:text-stone-300">{s.sourceAuYieldValue}</span>
             </p>
 
             <p>
-              US 2Y Yield:{" "}
+              {s.sourceUsYield}{" "}
               <span className="text-stone-700 dark:text-stone-300">
-                Federal Reserve via DBnomics
+                {s.sourceUsYieldValue}
               </span>
             </p>
 
             <p>
-              Iron Ore:{" "}
-              <span className="text-stone-700 dark:text-stone-300">OilPriceAPI</span>
+              {s.sourceIronOre}{" "}
+              <span className="text-stone-700 dark:text-stone-300">{s.sourceIronOreValue}</span>
             </p>
 
             <p>
-              Brent Live:{" "}
-              <span className="text-stone-700 dark:text-stone-300">OilPriceAPI</span>
+              {s.sourceBrentLive}{" "}
+              <span className="text-stone-700 dark:text-stone-300">{s.sourceBrentLiveValue}</span>
             </p>
 
             <p>
-              Brent Historical Reference:{" "}
-              <span className="text-stone-700 dark:text-stone-300">EIA</span>
+              {s.sourceBrentHist}{" "}
+              <span className="text-stone-700 dark:text-stone-300">{s.sourceBrentHistValue}</span>
             </p>
 
             <p>
-              Gold: <span className="text-stone-700 dark:text-stone-300">Gold-API</span>
+              {s.sourceGold} <span className="text-stone-700 dark:text-stone-300">{s.sourceGoldValue}</span>
             </p>
 
             <p>
-              Risk / Volatility:{" "}
-              <span className="text-stone-700 dark:text-stone-300">VIXY via Twelve Data</span>
+              {s.sourceRisk}{" "}
+              <span className="text-stone-700 dark:text-stone-300">{s.sourceRiskValue}</span>
             </p>
 
             <p>
-              News Signals:{" "}
+              {s.sourceNews}{" "}
               <span className="text-stone-700 dark:text-stone-300">
-                Alpha Vantage News + Google Gemini
+                {s.sourceNewsValue}
               </span>
             </p>
 
             <p>
-              AUD/THB Reference (comparison only):{" "}
+              {s.sourceYahoo}{" "}
               <span className="text-stone-700 dark:text-stone-300">
-                Yahoo Finance (unofficial)
+                {s.sourceYahooValue}
               </span>
             </p>
             </div>
@@ -322,12 +405,12 @@ export default async function Home() {
         </div>
 
         <p className="text-center text-xs text-stone-600 dark:text-stone-400 mb-2">
-          AUD/THB Forecast Dashboard -- for research and monitoring purposes only, not financial advice.
+          {s.disclaimer}
         </p>
 
         <p className="text-center text-xs text-stone-600 dark:text-stone-400 mb-6">
           <Link href="/status" className="hover:underline underline-offset-2">
-            System status
+            {s.systemStatus}
           </Link>
         </p>
       </div>

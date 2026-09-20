@@ -8,6 +8,7 @@ import StatusBadge, { type BadgeTone } from "@/components/StatusBadge";
 import ScoreGauge from "@/components/ScoreGauge";
 import InfoTip from "@/components/InfoTip";
 import Figure from "@/components/Figure";
+import { tLabel, freshnessLabel, type Locale } from "@/lib/i18n";
 
 function confidenceTone(level: ConfidenceLevel): BadgeTone {
   if (level === "HIGH") return "emerald";
@@ -15,9 +16,12 @@ function confidenceTone(level: ConfidenceLevel): BadgeTone {
   return "red";
 }
 
-function formatHoursUntil(hours: number) {
-  if (hours < 1) return `${Math.round(hours * 60)} min`;
-  return `${hours.toFixed(1)}h`;
+function formatHoursUntil(hours: number, locale: Locale) {
+  if (hours < 1) {
+    const mins = Math.round(hours * 60);
+    return locale === "th" ? `${mins} นาที` : `${mins} min`;
+  }
+  return locale === "th" ? `${hours.toFixed(1)} ชม.` : `${hours.toFixed(1)}h`;
 }
 
 function freshnessTone(status: string): BadgeTone {
@@ -62,9 +66,9 @@ function forecastDirectionColor(direction: ForecastDirection) {
   return "text-stone-700 dark:text-stone-300";
 }
 
-function coreFeeds(data: DashboardData) {
+function coreFeeds(data: DashboardData, locale: Locale) {
   return [
-    { label: "Direct", status: data.directFreshness.status },
+    { label: locale === "th" ? "ตรง" : "Direct", status: data.directFreshness.status },
     { label: "AUD/USD", status: data.audUsdFreshness.status },
     { label: "USD/THB", status: data.usdThbFreshness.status },
   ];
@@ -77,9 +81,157 @@ function feedDotColor(status: string) {
   return "text-red-500 dark:text-red-400";
 }
 
-export default async function Hero({ data }: { data: DashboardData }) {
+const STR = {
+  en: {
+    spot: "AUD/THB Spot",
+    range: "Range",
+    updated: (time: string, source: string) => `Updated ${time} (Bangkok) via ${source}`,
+    forecast: "Forecast",
+    forecastTooltip:
+      "Derived from today's Core FX Score using a fixed, uncalibrated formula per horizon -- it is not a statistically fitted prediction. Track Record below is the only honest measure of how well each one actually performs.",
+    allNeutral: (score: number) =>
+      `All three read NEUTRAL because Core FX Score (${score}) is inside the -15 to +15 neutral band -- every horizon uses the same directional call, only the predicted move size differs.`,
+    priceRange: (low: string, high: string) => `Price range: ${low} to ${high}`,
+    directionCorrect: (pct: string, n: number, basePct: string) =>
+      `Direction correct ${pct}% of last ${n} (baseline ${basePct}%)`,
+    notEnough: (extra: string) => `Not enough resolved forecasts yet to show accuracy${extra}.`,
+    caution: "Caution",
+    noForecast: "Core FX Score is not available right now -- unable to calculate a forecast.",
+    coreFxScore: "Core FX Score",
+    coreFxScoreTooltip:
+      "One score combining 7 market and economic signals: -100 (bearish AUD) to +100 (bullish AUD). Not a price prediction.",
+    confidence: "Confidence",
+    eventRisk: (level: string, name: string, currency: string, hours: string) =>
+      `Event Risk (${level}): ${name} (${currency}) in ${hours} -- expect volatility, treat this score with extra caution.`,
+    modelCoverage: "Model Coverage",
+    modelCoverageTooltip: "How much of the model actually had data this run. Lower means fewer signals than usual.",
+    modelCoverageLine1: "Coverage is the share of data actually available right now, not the accuracy of the score.",
+    modelCoverageLine2:
+      "Gold isn't included in the score yet, but coverage can still reach 100/100 when all other data is complete, and drops when data is missing or the market is closed.",
+    factorsHeading: "Factors behind this score",
+    viewBreakdown: "View full Score Breakdown →",
+    eventRiskAround: (name: string, currency: string, hours: string) =>
+      `${name} (${currency}) in ${hours} -- expect volatility around that time.`,
+    confidenceCaution: (level: string) => `Confidence is currently ${level} -- see reasons above.`,
+    coverageCaution: (coverage: string) =>
+      `Model coverage is only ${coverage}/100 right now -- some signals are missing or delayed.`,
+    marketClosedCaution: "AUD/THB market is currently closed -- these ranges assume normal trading conditions.",
+    factors: {
+      priceMomentum: {
+        name: "Price / Momentum",
+        tooltip: "Shows what the market is doing right now, before slower news or data can catch up.",
+        weightLabel: "FX Weight: 35%",
+      },
+      crossCurrency: {
+        name: "Cross Currency",
+        tooltip: "Double-checks the price a second way, so one glitchy data feed can't fool the model.",
+        weightLabel: "FX Weight: 20%",
+      },
+      relativeMarket: {
+        name: "Relative Market",
+        tooltip: "Money flows and regional risk appetite can move AUD/THB even when nothing changes locally.",
+        weightLabel: (w: string) => `Weight: ${w}/15`,
+      },
+      commodity: {
+        name: "Commodity",
+        tooltip: "Iron ore and oil prices move AUD/THB on their own, separate from currency markets.",
+        weightLabel: (w: string) => `Weight: ${w}/8`,
+      },
+      meanReversion: {
+        name: "Mean Reversion",
+        tooltip: "A price that moved too far too fast today tends to snap back a little.",
+        weightLabel: "FX Weight: 5%",
+      },
+      macro: {
+        name: "Macro / Policy",
+        tooltip: "Rates, inflation, jobs and growth set the bigger trend under the day's price swings.",
+        weightLabel: (w: string) => `Weight: ${w}/10`,
+      },
+      risk: {
+        name: "Risk / VIXY",
+        tooltip: "AUD is a 'risk' currency -- investors sell it for safety when markets get volatile.",
+        weightLabel: (w: string) => `Weight: ${w}/7`,
+      },
+    },
+  },
+  th: {
+    spot: "AUD/THB ราคาปัจจุบัน",
+    range: "ช่วงราคา",
+    updated: (time: string, source: string) => `อัปเดต ${time} (เวลาไทย) จาก ${source}`,
+    forecast: "พยากรณ์",
+    forecastTooltip:
+      "คำนวณจาก Core FX Score ของวันนี้ด้วยสูตรคงที่ที่ยังไม่ได้ปรับเทียบในแต่ละกรอบเวลา -- ไม่ใช่การพยากรณ์ที่ผ่านการทดสอบทางสถิติ Track Record ด้านล่างคือตัวชี้วัดความแม่นยำจริงเพียงอย่างเดียวที่เชื่อถือได้",
+    allNeutral: (score: number) =>
+      `ทั้งสามกรอบเวลาอ่านได้ NEUTRAL เพราะ Core FX Score (${score}) อยู่ในช่วงเป็นกลาง -15 ถึง +15 -- ทุกกรอบเวลาใช้เกณฑ์ทิศทางเดียวกัน ต่างกันแค่ขนาดการเคลื่อนไหวที่คาดการณ์`,
+    priceRange: (low: string, high: string) => `ช่วงราคา: ${low} ถึง ${high}`,
+    directionCorrect: (pct: string, n: number, basePct: string) =>
+      `ทายทิศทางถูก ${pct}% จาก ${n} ครั้งล่าสุด (baseline ${basePct}%)`,
+    notEnough: (extra: string) => `ยังมีข้อมูลไม่พอที่จะแสดงความแม่นยำ${extra}`,
+    caution: "ข้อควรระวัง",
+    noForecast: "ไม่มี Core FX Score ในขณะนี้ -- ไม่สามารถคำนวณพยากรณ์ได้",
+    coreFxScore: "Core FX Score",
+    coreFxScoreTooltip:
+      "คะแนนเดียวที่รวม 7 สัญญาณตลาดและเศรษฐกิจ: -100 (ขาลง AUD) ถึง +100 (ขาขึ้น AUD) ไม่ใช่การพยากรณ์ราคา",
+    confidence: "ความมั่นใจ",
+    eventRisk: (level: string, name: string, currency: string, hours: string) =>
+      `ความเสี่ยงจากข่าว (${level}): ${name} (${currency}) ในอีก ${hours} -- คาดว่าจะผันผวน ควรใช้คะแนนนี้ด้วยความระมัดระวังเป็นพิเศษ`,
+    modelCoverage: "ความครบถ้วนของข้อมูล",
+    modelCoverageTooltip: "ข้อมูลที่โมเดลได้รับจริงในรอบนี้มีมากแค่ไหน ยิ่งต่ำยิ่งมีสัญญาณน้อยกว่าปกติ",
+    modelCoverageLine1: "ความครบถ้วนคือสัดส่วนข้อมูลที่มีอยู่จริงตอนนี้ ไม่ใช่ความแม่นยำของคะแนน",
+    modelCoverageLine2:
+      "ทองคำยังไม่ถูกนำไปคิดคะแนน แต่ความครบถ้วนยังขึ้นถึง 100/100 ได้เมื่อข้อมูลอื่นครบ และจะลดลงเมื่อข้อมูลขาดหายหรือตลาดปิด",
+    factorsHeading: "ปัจจัยที่อยู่เบื้องหลังคะแนนนี้",
+    viewBreakdown: "ดู Score Breakdown แบบเต็ม →",
+    eventRiskAround: (name: string, currency: string, hours: string) =>
+      `${name} (${currency}) ในอีก ${hours} -- คาดว่าจะผันผวนช่วงนั้น`,
+    confidenceCaution: (level: string) => `ตอนนี้ความมั่นใจอยู่ที่ระดับ ${level} -- ดูเหตุผลด้านบน`,
+    coverageCaution: (coverage: string) =>
+      `ความครบถ้วนของข้อมูลตอนนี้มีแค่ ${coverage}/100 -- บางสัญญาณขาดหายหรือมาช้า`,
+    marketClosedCaution: "ตลาด AUD/THB ปิดอยู่ในขณะนี้ -- ช่วงราคานี้สมมุติสภาวะการซื้อขายปกติ",
+    factors: {
+      priceMomentum: {
+        name: "ราคา / โมเมนตัม",
+        tooltip: "แสดงสิ่งที่ตลาดกำลังทำอยู่ตอนนี้ ก่อนที่ข่าวหรือข้อมูลอื่นที่ช้ากว่าจะตามทัน",
+        weightLabel: "น้ำหนัก FX: 35%",
+      },
+      crossCurrency: {
+        name: "Cross Currency",
+        tooltip: "ตรวจสอบราคาซ้ำอีกทาง เพื่อไม่ให้ฟีดข้อมูลที่ผิดพลาดหลอกโมเดลได้",
+        weightLabel: "น้ำหนัก FX: 20%",
+      },
+      relativeMarket: {
+        name: "Relative Market",
+        tooltip: "กระแสเงินทุนและความเสี่ยงในภูมิภาคสามารถขยับ AUD/THB ได้แม้ไม่มีอะไรเปลี่ยนในประเทศ",
+        weightLabel: (w: string) => `น้ำหนัก: ${w}/15`,
+      },
+      commodity: {
+        name: "สินค้าโภคภัณฑ์",
+        tooltip: "ราคาแร่เหล็กและน้ำมันขยับ AUD/THB ได้เอง แยกจากตลาดค่าเงิน",
+        weightLabel: (w: string) => `น้ำหนัก: ${w}/8`,
+      },
+      meanReversion: {
+        name: "Mean Reversion",
+        tooltip: "ราคาที่วิ่งไปไกลเกินไปในวันนั้นมักจะดีดกลับมาบ้าง",
+        weightLabel: "น้ำหนัก FX: 5%",
+      },
+      macro: {
+        name: "Macro / นโยบาย",
+        tooltip: "ดอกเบี้ย เงินเฟ้อ การจ้างงาน และการเติบโตทางเศรษฐกิจ กำหนดแนวโน้มใหญ่ใต้ความผันผวนรายวัน",
+        weightLabel: (w: string) => `น้ำหนัก: ${w}/10`,
+      },
+      risk: {
+        name: "ความเสี่ยง / VIXY",
+        tooltip: "AUD เป็น 'risk currency' -- นักลงทุนขายเพื่อความปลอดภัยเมื่อตลาดผันผวน",
+        weightLabel: (w: string) => `น้ำหนัก: ${w}/7`,
+      },
+    },
+  },
+} as const;
+
+export default async function Hero({ data, locale }: { data: DashboardData; locale: Locale }) {
   const eventRisk = await getEventRisk();
-  const confidence = await getConfidence(data);
+  const confidence = await getConfidence(data, locale);
+  const t = STR[locale];
 
   const referenceRate = data.latestPrice ? Number(data.latestPrice.rate) : null;
 
@@ -88,45 +240,45 @@ export default async function Hero({ data }: { data: DashboardData }) {
   // sub-factor detail, which is one click away via the link below.
   const scoreFactors: { name: string; tooltip: string; weightLabel: string; score: number | null }[] = [
     {
-      name: "Price / Momentum",
-      tooltip: "Shows what the market is doing right now, before slower news or data can catch up.",
-      weightLabel: "FX Weight: 35%",
+      name: t.factors.priceMomentum.name,
+      tooltip: t.factors.priceMomentum.tooltip,
+      weightLabel: t.factors.priceMomentum.weightLabel,
       score: data.priceMomentumScore,
     },
     {
-      name: "Cross Currency",
-      tooltip: "Double-checks the price a second way, so one glitchy data feed can't fool the model.",
-      weightLabel: "FX Weight: 20%",
+      name: t.factors.crossCurrency.name,
+      tooltip: t.factors.crossCurrency.tooltip,
+      weightLabel: t.factors.crossCurrency.weightLabel,
       score: data.crossCurrencyScore,
     },
     {
-      name: "Relative Market",
-      tooltip: "Money flows and regional risk appetite can move AUD/THB even when nothing changes locally.",
-      weightLabel: `Weight: ${data.relativeMarketEffectiveWeight.toFixed(1)}/15`,
+      name: t.factors.relativeMarket.name,
+      tooltip: t.factors.relativeMarket.tooltip,
+      weightLabel: t.factors.relativeMarket.weightLabel(data.relativeMarketEffectiveWeight.toFixed(1)),
       score: data.relativeMarketScore,
     },
     {
-      name: "Commodity",
-      tooltip: "Iron ore and oil prices move AUD/THB on their own, separate from currency markets.",
-      weightLabel: `Weight: ${data.commodityEffectiveFxWeight.toFixed(1)}/8`,
+      name: t.factors.commodity.name,
+      tooltip: t.factors.commodity.tooltip,
+      weightLabel: t.factors.commodity.weightLabel(data.commodityEffectiveFxWeight.toFixed(1)),
       score: data.commodityScore,
     },
     {
-      name: "Mean Reversion",
-      tooltip: "A price that moved too far too fast today tends to snap back a little.",
-      weightLabel: "FX Weight: 5%",
+      name: t.factors.meanReversion.name,
+      tooltip: t.factors.meanReversion.tooltip,
+      weightLabel: t.factors.meanReversion.weightLabel,
       score: data.meanReversionScore,
     },
     {
-      name: "Macro / Policy",
-      tooltip: "Rates, inflation, jobs and growth set the bigger trend under the day's price swings.",
-      weightLabel: `Weight: ${data.macroEffectiveFxWeight.toFixed(1)}/10`,
+      name: t.factors.macro.name,
+      tooltip: t.factors.macro.tooltip,
+      weightLabel: t.factors.macro.weightLabel(data.macroEffectiveFxWeight.toFixed(1)),
       score: data.macroScore,
     },
     {
-      name: "Risk / VIXY",
-      tooltip: "AUD is a 'risk' currency -- investors sell it for safety when markets get volatile.",
-      weightLabel: `Weight: ${data.riskEffectiveWeight.toFixed(1)}/7`,
+      name: t.factors.risk.name,
+      tooltip: t.factors.risk.tooltip,
+      weightLabel: t.factors.risk.weightLabel(data.riskEffectiveWeight.toFixed(1)),
       score: data.riskScore,
     },
   ];
@@ -172,19 +324,17 @@ export default async function Hero({ data }: { data: DashboardData }) {
   const cautionNotes: string[] = [];
   if (eventRisk.level !== "NONE" && eventRisk.event && eventRisk.hoursUntil !== null) {
     cautionNotes.push(
-      `${eventRisk.event.eventName} (${eventRisk.event.currency}) in ${formatHoursUntil(eventRisk.hoursUntil)} -- expect volatility around that time.`,
+      t.eventRiskAround(eventRisk.event.eventName, eventRisk.event.currency, formatHoursUntil(eventRisk.hoursUntil, locale)),
     );
   }
   if (confidence.level !== "HIGH") {
-    cautionNotes.push(`Confidence is currently ${confidence.level} -- see reasons above.`);
+    cautionNotes.push(t.confidenceCaution(tLabel(confidence.level, locale)));
   }
   if (data.availableCoreWeight < 100) {
-    cautionNotes.push(
-      `Model coverage is only ${data.availableCoreWeight.toFixed(1)}/100 right now -- some signals are missing or delayed.`,
-    );
+    cautionNotes.push(t.coverageCaution(data.availableCoreWeight.toFixed(1)));
   }
   if (data.latestPriceFreshness.status === "MARKET_CLOSED") {
-    cautionNotes.push("AUD/THB market is currently closed -- these ranges assume normal trading conditions.");
+    cautionNotes.push(t.marketClosedCaution);
   }
 
   return (
@@ -194,12 +344,12 @@ export default async function Hero({ data }: { data: DashboardData }) {
         <div className="md:border-r border-stone-200 dark:border-stone-800 md:pr-8">
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <p className="text-xs font-medium text-stone-600 dark:text-stone-400 uppercase tracking-widest">
-              AUD/THB Spot
+              {t.spot}
             </p>
 
             {data.latestPrice && (
               <StatusBadge
-                label={data.latestPriceFreshness.status}
+                label={freshnessLabel(data.latestPriceFreshness.status, locale)}
                 tone={freshnessTone(data.latestPriceFreshness.status)}
               />
             )}
@@ -228,7 +378,7 @@ export default async function Hero({ data }: { data: DashboardData }) {
             </span>
 
             <span className="inline-flex items-baseline gap-1 text-stone-600 dark:text-stone-400">
-              Range
+              {t.range}
               <Figure
                 value={
                   data.intradayLow !== null && data.intradayHigh !== null
@@ -241,16 +391,17 @@ export default async function Hero({ data }: { data: DashboardData }) {
 
           {data.latestPrice && (
             <p className="text-xs text-stone-600 dark:text-stone-400 mt-3">
-              Updated{" "}
-              {new Date(data.latestPrice.market_timestamp).toLocaleString("en-GB", {
-                timeZone: "Asia/Bangkok",
-                day: "2-digit",
-                month: "2-digit",
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false,
-              })}{" "}
-              (Bangkok) via {data.latestPrice.source}
+              {t.updated(
+                new Date(data.latestPrice.market_timestamp).toLocaleString("en-GB", {
+                  timeZone: "Asia/Bangkok",
+                  day: "2-digit",
+                  month: "2-digit",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: false,
+                }),
+                data.latestPrice.source ?? "",
+              )}
             </p>
           )}
 
@@ -258,11 +409,11 @@ export default async function Hero({ data }: { data: DashboardData }) {
               a narrated "X/3 fresh" sentence. */}
           <div
             className="flex items-center gap-1.5 mt-1.5"
-            aria-label={`Core feed status: ${coreFeeds(data)
+            aria-label={`${locale === "th" ? "สถานะฟีดหลัก" : "Core feed status"}: ${coreFeeds(data, locale)
               .map((f) => `${f.label} ${f.status.toLowerCase().replace("_", " ")}`)
               .join(", ")}`}
           >
-            {coreFeeds(data).map((f) => (
+            {coreFeeds(data, locale).map((f) => (
               <span
                 key={f.label}
                 title={`${f.label}: ${f.status}`}
@@ -273,17 +424,15 @@ export default async function Hero({ data }: { data: DashboardData }) {
 
           <div className="mt-5 pt-4 border-t border-stone-200 dark:border-stone-800">
             <p className="text-xs font-medium text-stone-600 dark:text-stone-400 uppercase tracking-widest inline-flex items-center">
-              Forecast
-              <InfoTip text="Derived from today's Core FX Score using a fixed, uncalibrated formula per horizon -- it is not a statistically fitted prediction. Track Record below is the only honest measure of how well each one actually performs." />
+              {t.forecast}
+              <InfoTip text={t.forecastTooltip} />
             </p>
 
             {forecasts.length > 0 ? (
               <>
                 {allNeutral && (
                   <p className="text-xs text-stone-600 dark:text-stone-400 mt-1.5 leading-relaxed">
-                    All three read NEUTRAL because Core FX Score ({data.coreFxScore}) is inside the -15 to +15
-                    neutral band -- every horizon uses the same directional call, only the predicted move size
-                    differs.
+                    {t.allNeutral(data.coreFxScore!)}
                   </p>
                 )}
 
@@ -295,9 +444,9 @@ export default async function Hero({ data }: { data: DashboardData }) {
                           {horizon}
                         </span>
                         <p className={`text-lg font-semibold ${forecastDirectionColor(forecast.predictedDirection)}`}>
-                          {forecast.predictedDirection}
+                          {tLabel(forecast.predictedDirection, locale)}
                         </p>
-                        <StatusBadge label="Uncalibrated" tone="amber" />
+                        <StatusBadge label={tLabel("Uncalibrated", locale)} tone="amber" />
                         <span className="text-xs text-stone-600 dark:text-stone-400 ml-auto">
                           {forecast.predictedMovePct >= 0 ? "+" : ""}
                           {forecast.predictedMovePct.toFixed(2)}% ({forecast.predictedRangeLowPct.toFixed(2)}% to{" "}
@@ -307,21 +456,19 @@ export default async function Hero({ data }: { data: DashboardData }) {
 
                       {priceRange && (
                         <p className="text-xs text-stone-500 dark:text-stone-500 mt-0.5">
-                          Price range: {priceRange.low.toFixed(4)} to {priceRange.high.toFixed(4)}
+                          {t.priceRange(priceRange.low.toFixed(4), priceRange.high.toFixed(4))}
                         </p>
                       )}
 
                       <p className="text-xs text-stone-600 dark:text-stone-400 mt-1">
                         {trackRecord && !trackRecord.insufficientData ? (
-                          <>
-                            Direction correct {(trackRecord.model.directionalAccuracy! * 100).toFixed(1)}% of last{" "}
-                            {trackRecord.sampleSize} (baseline{" "}
-                            {(trackRecord.baselineNoChange.directionalAccuracy! * 100).toFixed(1)}%)
-                          </>
+                          t.directionCorrect(
+                            (trackRecord.model.directionalAccuracy! * 100).toFixed(1),
+                            trackRecord.sampleSize,
+                            (trackRecord.baselineNoChange.directionalAccuracy! * 100).toFixed(1),
+                          )
                         ) : (
-                          `Not enough resolved forecasts yet to show accuracy${
-                            trackRecord ? ` (${trackRecord.sampleSize}/${trackRecord.minSampleSize})` : ""
-                          }.`
+                          t.notEnough(trackRecord ? ` (${trackRecord.sampleSize}/${trackRecord.minSampleSize})` : "")
                         )}
                       </p>
                     </div>
@@ -331,7 +478,7 @@ export default async function Hero({ data }: { data: DashboardData }) {
                 {cautionNotes.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-stone-200 dark:border-stone-800">
                     <p className="text-xs font-medium text-amber-700 dark:text-amber-400 uppercase tracking-widest">
-                      Caution
+                      {t.caution}
                     </p>
                     <ul className="mt-1 space-y-1">
                       {cautionNotes.map((note, i) => (
@@ -345,7 +492,7 @@ export default async function Hero({ data }: { data: DashboardData }) {
               </>
             ) : (
               <p className="text-sm text-stone-600 dark:text-stone-400 mt-1">
-                Core FX Score is not available right now -- unable to calculate a forecast.
+                {t.noForecast}
               </p>
             )}
           </div>
@@ -354,8 +501,8 @@ export default async function Hero({ data }: { data: DashboardData }) {
         {/* CORE FX SCORE */}
         <div>
           <p className="text-xs font-medium text-stone-600 dark:text-stone-400 uppercase tracking-widest inline-flex items-center">
-            Core FX Score
-            <InfoTip text="One score combining 7 market and economic signals: -100 (bearish AUD) to +100 (bullish AUD). Not a price prediction." />
+            {t.coreFxScore}
+            <InfoTip text={t.coreFxScoreTooltip} />
           </p>
 
           <div className="flex flex-wrap items-baseline gap-3 mt-2">
@@ -364,11 +511,11 @@ export default async function Hero({ data }: { data: DashboardData }) {
               className={`text-4xl sm:text-5xl font-semibold tracking-tight ${scoreTextColor(data.coreFxScore)}`}
             />
 
-            <p className="text-lg font-semibold text-stone-700 dark:text-stone-300">{data.coreBias}</p>
+            <p className="text-lg font-semibold text-stone-700 dark:text-stone-300">{tLabel(data.coreBias, locale)}</p>
           </div>
 
           <div className="mt-2 inline-flex items-center">
-            <StatusBadge label={`Confidence: ${confidence.level}`} tone={confidenceTone(confidence.level)} />
+            <StatusBadge label={`${t.confidence}: ${tLabel(confidence.level, locale)}`} tone={confidenceTone(confidence.level)} />
             <InfoTip text={confidence.reasons.join(". ") + "."} />
           </div>
 
@@ -382,16 +529,20 @@ export default async function Hero({ data }: { data: DashboardData }) {
                   : "bg-amber-500/10 text-amber-700 dark:text-amber-400"
               }`}
             >
-              Event Risk ({eventRisk.level}): {eventRisk.event.eventName} ({eventRisk.event.currency}) in{" "}
-              {formatHoursUntil(eventRisk.hoursUntil)} -- expect volatility, treat this score with extra caution.
+              {t.eventRisk(
+                tLabel(eventRisk.level, locale),
+                eventRisk.event.eventName,
+                eventRisk.event.currency,
+                formatHoursUntil(eventRisk.hoursUntil, locale),
+              )}
             </div>
           )}
 
           <div className="mt-5 pt-4 border-t border-stone-200 dark:border-stone-800">
             <div className="flex items-center justify-between">
               <p className="text-sm text-stone-600 dark:text-stone-400 inline-flex items-center">
-                Model Coverage
-                <InfoTip text="How much of the model actually had data this run. Lower means fewer signals than usual." />
+                {t.modelCoverage}
+                <InfoTip text={t.modelCoverageTooltip} />
               </p>
               <p className="text-lg font-semibold font-mono tabular-nums">
                 {data.availableCoreWeight.toFixed(1)}/100
@@ -399,17 +550,16 @@ export default async function Hero({ data }: { data: DashboardData }) {
             </div>
 
             <p className="text-xs text-stone-600 dark:text-stone-400 mt-1">
-              Coverage is the share of data actually available right now, not the accuracy of the score.
+              {t.modelCoverageLine1}
             </p>
 
             <p className="text-xs text-stone-600 dark:text-stone-400 mt-1">
-              Gold isn't included in the score yet, but coverage can still reach 100/100 when all other data is
-              complete, and drops when data is missing or the market is closed.
+              {t.modelCoverageLine2}
             </p>
           </div>
 
           <div className="mt-4 pt-4 border-t border-stone-200 dark:border-stone-800">
-            <p className="text-sm text-stone-600 dark:text-stone-400">Factors behind this score</p>
+            <p className="text-sm text-stone-600 dark:text-stone-400">{t.factorsHeading}</p>
 
             <div className="mt-1">
               {scoreFactors.map((f) => (
@@ -434,7 +584,7 @@ export default async function Hero({ data }: { data: DashboardData }) {
               href="/score-breakdown"
               className="mt-3 inline-block text-xs font-medium text-brass-700 dark:text-brass-400 hover:underline underline-offset-2"
             >
-              View full Score Breakdown &rarr;
+              {t.viewBreakdown}
             </Link>
           </div>
         </div>

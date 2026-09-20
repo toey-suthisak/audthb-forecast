@@ -1,5 +1,31 @@
 import "server-only";
 import { supabaseAdmin } from "@/lib/supabase-server";
+import type { Locale } from "@/lib/i18n";
+
+const STR = {
+  en: {
+    dataSource: "RBA F11.1 (Reserve Bank of Australia, daily)",
+    notEnoughRows: "Not enough historical rows loaded yet.",
+    queryFailed: (msg: string) => `Backtest query failed: ${msg}`,
+    momentumName: (n: number) => `${n}-Day Momentum`,
+    momentumDesc: (n: number) => `Predicts tomorrow continues the same direction as the trailing ${n} trading days.`,
+    reversionName: (n: number) => `${n}-Day Mean Reversion`,
+    reversionDesc: (n: number) => `Predicts tomorrow reverses the trailing ${n} trading days' direction.`,
+    weekendGap: "Fri → Mon (weekend gap)",
+    regularGap: "Regular weekday → weekday",
+  },
+  th: {
+    dataSource: "RBA F11.1 (ธนาคารกลางออสเตรเลีย, รายวัน)",
+    notEnoughRows: "ยังโหลดข้อมูลย้อนหลังไม่พอ",
+    queryFailed: (msg: string) => `การดึงข้อมูล backtest ล้มเหลว: ${msg}`,
+    momentumName: (n: number) => `โมเมนตัม ${n} วัน`,
+    momentumDesc: (n: number) => `พยากรณ์ว่าพรุ่งนี้จะไปทิศทางเดิมกับ ${n} วันซื้อขายที่ผ่านมา`,
+    reversionName: (n: number) => `Mean Reversion ${n} วัน`,
+    reversionDesc: (n: number) => `พยากรณ์ว่าพรุ่งนี้จะกลับทิศทางจาก ${n} วันซื้อขายที่ผ่านมา`,
+    weekendGap: "ศุกร์ → จันทร์ (ข้ามสุดสัปดาห์)",
+    regularGap: "วันทำการปกติ → วันทำการปกติ",
+  },
+} as const;
 
 // Workflow J: a genuine historical backtest, separate from the live
 // Track Record (Evaluation). Track Record grades the live Core FX Score
@@ -57,9 +83,6 @@ export type BacktestSegmentResult = {
   mae: number;
   beatsCoinFlip: boolean;
 };
-
-const WEEKEND_GAP_LABEL = "Fri → Mon (weekend gap)";
-const REGULAR_GAP_LABEL = "Regular weekday → weekday";
 
 export type BacktestStrategyResult = {
   name: string;
@@ -153,7 +176,8 @@ function breakdownBySegments(labels: string[], correct: number[], absErrors: num
   });
 }
 
-export async function getBacktestSummary(): Promise<BacktestSummary> {
+export async function getBacktestSummary(locale: Locale = "th"): Promise<BacktestSummary> {
+  const t = STR[locale];
   const { data, error } = await supabaseAdmin
     .from("backtest_daily_rates")
     .select("rate_date, aud_thb")
@@ -163,20 +187,20 @@ export async function getBacktestSummary(): Promise<BacktestSummary> {
     sampleSize: 0,
     dataFrom: "",
     dataTo: "",
-    dataSource: "RBA F11.1 (Reserve Bank of Australia, daily)",
+    dataSource: t.dataSource,
     baseline: { directionalAccuracy: 0, mae: 0 },
     strategies: [],
     error: null,
   };
 
   if (error) {
-    return { ...empty, error: `Backtest query failed: ${error.message}` };
+    return { ...empty, error: t.queryFailed(error.message) };
   }
 
   const rows = (data ?? []) as DailyRate[];
 
   if (rows.length < MOMENTUM_WINDOW_DAYS + 2) {
-    return { ...empty, error: "Not enough historical rows loaded yet." };
+    return { ...empty, error: t.notEnoughRows };
   }
 
   const rates = rows.map((r) => Number(r.aud_thb));
@@ -201,7 +225,7 @@ export async function getBacktestSummary(): Promise<BacktestSummary> {
     momentumMoves.push(((today - past) / past) * 100);
     years.push(rows[i].rate_date.slice(0, 4));
     const isFriday = new Date(rows[i].rate_date).getUTCDay() === 5;
-    weekendGapLabels.push(isFriday ? WEEKEND_GAP_LABEL : REGULAR_GAP_LABEL);
+    weekendGapLabels.push(isFriday ? t.weekendGap : t.regularGap);
   }
 
   const actualDirections = actualMoves.map(direction);
@@ -230,15 +254,15 @@ export async function getBacktestSummary(): Promise<BacktestSummary> {
     sampleSize: actualMoves.length,
     dataFrom: rows[0].rate_date,
     dataTo: rows[rows.length - 1].rate_date,
-    dataSource: "RBA F11.1 (Reserve Bank of Australia, daily)",
+    dataSource: t.dataSource,
     baseline: {
       directionalAccuracy: baselineDirectionalAccuracy,
       mae: baselineMae,
     },
     strategies: [
       {
-        name: `${MOMENTUM_WINDOW_DAYS}-Day Momentum`,
-        description: `Predicts tomorrow continues the same direction as the trailing ${MOMENTUM_WINDOW_DAYS} trading days.`,
+        name: t.momentumName(MOMENTUM_WINDOW_DAYS),
+        description: t.momentumDesc(MOMENTUM_WINDOW_DAYS),
         directionalAccuracy: momentumAccuracy,
         mae: momentumMae,
         beatsBaselineDirectionally: momentumAccuracy > baselineDirectionalAccuracy,
@@ -248,8 +272,8 @@ export async function getBacktestSummary(): Promise<BacktestSummary> {
         byWeekendGap: breakdownBySegments(weekendGapLabels, momentumCorrect, momentumAbsErrors),
       },
       {
-        name: `${MOMENTUM_WINDOW_DAYS}-Day Mean Reversion`,
-        description: `Predicts tomorrow reverses the trailing ${MOMENTUM_WINDOW_DAYS} trading days' direction.`,
+        name: t.reversionName(MOMENTUM_WINDOW_DAYS),
+        description: t.reversionDesc(MOMENTUM_WINDOW_DAYS),
         directionalAccuracy: reversionAccuracy,
         mae: reversionMae,
         beatsBaselineDirectionally: reversionAccuracy > baselineDirectionalAccuracy,

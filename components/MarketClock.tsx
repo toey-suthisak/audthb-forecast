@@ -4,6 +4,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import type { Locale } from "@/lib/i18n";
 
 function getTime(now: Date, timeZone: string): string {
   return new Intl.DateTimeFormat("en-GB", {
@@ -15,6 +16,11 @@ function getTime(now: Date, timeZone: string): string {
   }).format(now);
 }
 
+const STR = {
+  en: { bangkok: "Bangkok", sydney: "Sydney" },
+  th: { bangkok: "กรุงเทพฯ", sydney: "ซิดนีย์" },
+} as const;
+
 // Two secondary reference clocks -- useful context, not the headline of
 // the page, so this stays a single quiet line rather than the pair of
 // large bordered cards it used to be (those competed visually with the
@@ -22,10 +28,13 @@ function getTime(now: Date, timeZone: string): string {
 // attention).
 export default function MarketClock({
   variant = "default",
+  locale,
 }: {
   variant?: "default" | "inverted";
+  locale: Locale;
 }) {
   const [now, setNow] = useState<Date | null>(null);
+  const t = STR[locale];
 
   useEffect(() => {
     setNow(new Date());
@@ -40,14 +49,14 @@ export default function MarketClock({
   return (
     <div className={`flex items-center gap-3 sm:gap-4 text-xs sm:text-sm tabular-nums ${base}`}>
       <span className="flex items-baseline gap-1.5">
-        <span className={`font-medium ${label}`}>Bangkok</span>
+        <span className={`font-medium ${label}`}>{t.bangkok}</span>
         <span className="font-mono">{now ? getTime(now, "Asia/Bangkok") : "--:--:--"}</span>
       </span>
 
       <span className={divider}>|</span>
 
       <span className="flex items-baseline gap-1.5">
-        <span className={`font-medium ${label}`}>Sydney</span>
+        <span className={`font-medium ${label}`}>{t.sydney}</span>
         <span className="font-mono">{now ? getTime(now, "Australia/Sydney") : "--:--:--"}</span>
       </span>
     </div>

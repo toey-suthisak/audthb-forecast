@@ -3,6 +3,7 @@ import type { DashboardData } from "@/lib/dashboard-data";
 import StatusBadge, { type BadgeTone } from "@/components/StatusBadge";
 import Figure from "@/components/Figure";
 import StatusLight from "@/components/StatusLight";
+import { tLabel, type Locale } from "@/lib/i18n";
 
 function scoreTextColor(score: number | null) {
   if (score === null) return "text-stone-500";
@@ -23,6 +24,31 @@ function changeColor(value: number | null) {
   if (value < 0) return "text-red-700 dark:text-red-400";
   return "text-stone-600 dark:text-stone-400";
 }
+
+const STR = {
+  en: {
+    title: "Daily Recap",
+    noSnapshots: "No price snapshots yet today -- check back after the score-snapshot cron has run.",
+    todaySnapshots: (n: number) => `AUD/THB today -- ${n} snapshot${n === 1 ? "" : "s"}`,
+    todayChange: (pct: string) => `${pct}% today`,
+    open: "Open",
+    high: "High",
+    low: "Low",
+    coreFxScore: "Core FX Score",
+    dominantBias: "Dominant bias today",
+  },
+  th: {
+    title: "สรุปรายวัน",
+    noSnapshots: "ยังไม่มีข้อมูลราคาวันนี้ -- ลองกลับมาดูใหม่หลัง cron บันทึกคะแนนทำงาน",
+    todaySnapshots: (n: number) => `AUD/THB วันนี้ -- ${n} ครั้ง`,
+    todayChange: (pct: string) => `${pct}% วันนี้`,
+    open: "เปิด",
+    high: "สูงสุด",
+    low: "ต่ำสุด",
+    coreFxScore: "Core FX Score",
+    dominantBias: "แนวโน้มหลักวันนี้",
+  },
+} as const;
 
 // Where today's latest rate sits between today's low and high -- same
 // visual language as ScoreGauge, just on the day's own Low..High scale
@@ -56,7 +82,8 @@ function RangeBar({ min, max, current }: { min: number; max: number; current: nu
 // Hero: the live rate/score win as the headline, and also widen the
 // Open/High/Low range immediately instead of waiting for the next
 // snapshot to catch up.
-export default function DailyRecap({ recap, data }: { recap: DailyRecap; data: DashboardData }) {
+export default function DailyRecap({ recap, data, locale }: { recap: DailyRecap; data: DashboardData; locale: Locale }) {
+  const t = STR[locale];
   const liveRate = data.latestPrice ? Number(data.latestPrice.rate) : null;
   const liveScore = data.coreFxScore;
 
@@ -65,10 +92,10 @@ export default function DailyRecap({ recap, data }: { recap: DailyRecap; data: D
       <div className="p-6">
         <h2 className="text-xl font-semibold tracking-tight inline-flex items-center">
           <StatusLight colorClassName="text-brass-500 dark:text-brass-400" />
-          Daily Recap
+          {t.title}
         </h2>
         <p className="text-sm text-stone-600 dark:text-stone-400 mt-2">
-          No price snapshots yet today -- check back after the score-snapshot cron has run.
+          {t.noSnapshots}
         </p>
       </div>
     );
@@ -93,17 +120,17 @@ export default function DailyRecap({ recap, data }: { recap: DailyRecap; data: D
         <div>
           <h2 className="text-xl font-semibold tracking-tight inline-flex items-center">
             <StatusLight colorClassName="text-brass-500 dark:text-brass-400" />
-            Daily Recap
+            {t.title}
           </h2>
           <p className="text-sm text-stone-600 dark:text-stone-400">
-            AUD/THB today -- {recap.sampleSize} snapshot{recap.sampleSize === 1 ? "" : "s"}
+            {t.todaySnapshots(recap.sampleSize)}
           </p>
         </div>
 
         <div className="text-right">
           <Figure value={latestRate !== null ? latestRate.toFixed(4) : null} className="block text-2xl font-semibold" />
           <Figure
-            value={changePct !== null ? `${changePct >= 0 ? "+" : ""}${changePct.toFixed(2)}% today` : null}
+            value={changePct !== null ? t.todayChange(`${changePct >= 0 ? "+" : ""}${changePct.toFixed(2)}`) : null}
             className={`block text-sm mt-1 ${changeColor(changePct)}`}
           />
         </div>
@@ -115,12 +142,12 @@ export default function DailyRecap({ recap, data }: { recap: DailyRecap; data: D
 
       <div className="mt-4">
         <div className="flex items-center justify-between py-2 border-b border-stone-200 dark:border-stone-800">
-          <p className="text-sm text-stone-600 dark:text-stone-400">Open</p>
+          <p className="text-sm text-stone-600 dark:text-stone-400">{t.open}</p>
           <Figure value={recap.openRate !== null ? recap.openRate.toFixed(4) : null} className="text-base font-semibold" />
         </div>
 
         <div className="flex items-center justify-between py-2 border-b border-stone-200 dark:border-stone-800">
-          <p className="text-sm text-stone-600 dark:text-stone-400">High</p>
+          <p className="text-sm text-stone-600 dark:text-stone-400">{t.high}</p>
           <Figure
             value={maxRate !== null ? maxRate.toFixed(4) : null}
             className="text-base font-semibold text-emerald-700 dark:text-emerald-400"
@@ -128,7 +155,7 @@ export default function DailyRecap({ recap, data }: { recap: DailyRecap; data: D
         </div>
 
         <div className="flex items-center justify-between py-2 border-b border-stone-200 dark:border-stone-800">
-          <p className="text-sm text-stone-600 dark:text-stone-400">Low</p>
+          <p className="text-sm text-stone-600 dark:text-stone-400">{t.low}</p>
           <Figure
             value={minRate !== null ? minRate.toFixed(4) : null}
             className="text-base font-semibold text-red-700 dark:text-red-400"
@@ -136,7 +163,7 @@ export default function DailyRecap({ recap, data }: { recap: DailyRecap; data: D
         </div>
 
         <div className="flex items-center justify-between py-2">
-          <p className="text-sm text-stone-600 dark:text-stone-400">Core FX Score</p>
+          <p className="text-sm text-stone-600 dark:text-stone-400">{t.coreFxScore}</p>
           <Figure
             value={latestScore !== null ? String(latestScore) : null}
             className={`text-base font-semibold ${scoreTextColor(latestScore)}`}
@@ -145,8 +172,8 @@ export default function DailyRecap({ recap, data }: { recap: DailyRecap; data: D
       </div>
 
       <div className="mt-3 pt-3 border-t border-stone-200 dark:border-stone-800 flex items-center justify-between gap-3">
-        <p className="text-xs text-stone-600 dark:text-stone-400">Dominant bias today</p>
-        <StatusBadge label={dominantBias} tone={biasTone(dominantBias)} />
+        <p className="text-xs text-stone-600 dark:text-stone-400">{t.dominantBias}</p>
+        <StatusBadge label={tLabel(dominantBias, locale)} tone={biasTone(dominantBias)} />
       </div>
     </div>
   );

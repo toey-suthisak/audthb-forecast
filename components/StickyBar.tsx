@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import StatusBadge, { type BadgeTone } from "@/components/StatusBadge";
 import Figure from "@/components/Figure";
+import { freshnessLabel, tLabel, type Locale } from "@/lib/i18n";
 
 function freshnessTone(status: string): BadgeTone {
   if (status === "FRESH") return "emerald";
@@ -18,6 +19,11 @@ function scoreTextColor(score: number | null) {
   return "text-amber-700 dark:text-amber-400";
 }
 
+const STR = {
+  en: { audthb: "AUD/THB", score: "Score" },
+  th: { audthb: "AUD/THB", score: "คะแนน" },
+} as const;
+
 // Shows once the Hero card has scrolled out of view, so the headline
 // rate/score are never more than a glance away on a page that's grown
 // long enough to need real scrolling (Score Breakdown, Event Calendar,
@@ -28,13 +34,16 @@ export default function StickyBar({
   score,
   bias,
   freshnessStatus,
+  locale,
 }: {
   rate: number | null;
   score: number | null;
   bias: string;
   freshnessStatus: string;
+  locale: Locale;
 }) {
   const [visible, setVisible] = useState(false);
+  const t = STR[locale];
 
   useEffect(() => {
     const onScroll = () => setVisible(window.scrollY > 420);
@@ -54,21 +63,21 @@ export default function StickyBar({
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-2 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-[10px] font-medium text-stone-600 dark:text-stone-400 uppercase tracking-wide hidden sm:inline">
-              AUD/THB
+              {t.audthb}
             </span>
             <Figure value={rate !== null ? rate.toFixed(4) : null} className="text-sm font-semibold" />
-            <StatusBadge label={freshnessStatus} tone={freshnessTone(freshnessStatus)} />
+            <StatusBadge label={freshnessLabel(freshnessStatus, locale)} tone={freshnessTone(freshnessStatus)} />
           </div>
 
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-[10px] font-medium text-stone-600 dark:text-stone-400 uppercase tracking-wide hidden sm:inline">
-              Score
+              {t.score}
             </span>
             <Figure
               value={score !== null ? String(score) : null}
               className={`text-sm font-semibold ${scoreTextColor(score)}`}
             />
-            <span className="text-xs text-stone-600 dark:text-stone-400 hidden sm:inline">{bias}</span>
+            <span className="text-xs text-stone-600 dark:text-stone-400 hidden sm:inline">{tLabel(bias, locale)}</span>
           </div>
         </div>
       </div>
