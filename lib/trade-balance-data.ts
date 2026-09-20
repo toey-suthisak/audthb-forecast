@@ -11,7 +11,7 @@ import { quarterToDate, getGrowthFreshness } from "@/lib/growth-data";
 // current-account swing is at least plausibly informative for both.
 //
 // Tested against this project's own historical data (2026-09-18, see
-// AUDTHB-historical-analysis-2026-09.md "รอบสี่"): Thailand's CAB change
+// AUDTHB-historical-analysis-2026-09.md "round four"): Thailand's CAB change
 // doesn't correlate with AUD/THB (r=-0.05, unstable sign across the
 // sample). Australia's is borderline (r=-0.17, stable direction) but the
 // sign runs opposite the naive "better current account -> stronger

@@ -184,19 +184,23 @@ export default async function Hero({ data }: { data: DashboardData }) {
                 <p className="text-xs text-stone-600 dark:text-stone-400 mt-2 leading-relaxed">
                   {dailyTrackRecord && !dailyTrackRecord.insufficientData ? (
                     <>
-                      ยังไม่พิสูจน์ว่าแม่นกว่าเดา: จาก {dailyTrackRecord.sampleSize} ครั้งที่ผ่านมา ทายทิศทางถูก{" "}
-                      {(dailyTrackRecord.model.directionalAccuracy! * 100).toFixed(1)}% (baseline ทายว่านิ่งเฉย ๆ ถูก{" "}
-                      {(dailyTrackRecord.baselineNoChange.directionalAccuracy! * 100).toFixed(1)}%) และค่าเฉลี่ยความคลาดเคลื่อน{" "}
-                      {dailyTrackRecord.beatsBaseline.onMae ? "ดีกว่า" : "แย่กว่าหรือพอ ๆ กับ"} baseline -- ดูตัวเลขเต็มที่ Track Record ด้านล่าง
+                      Not yet proven more accurate than a guess: over the last {dailyTrackRecord.sampleSize} forecasts,
+                      direction was correct{" "}
+                      {(dailyTrackRecord.model.directionalAccuracy! * 100).toFixed(1)}% of the time (baseline guessing
+                      "no change" was correct{" "}
+                      {(dailyTrackRecord.baselineNoChange.directionalAccuracy! * 100).toFixed(1)}% of the time), and
+                      average error is{" "}
+                      {dailyTrackRecord.beatsBaseline.onMae ? "better than" : "worse than or about the same as"} the
+                      baseline -- see full numbers in Track Record below.
                     </>
                   ) : (
-                    "ยังสะสมข้อมูลไม่พอยืนยันความแม่นยำ (ต้องการอย่างน้อย 20 ครั้งที่ resolved แล้ว) ดู Track Record ด้านล่างเมื่อมีข้อมูลพอ"
+                    "Not enough data yet to confirm accuracy (needs at least 20 resolved forecasts). Check Track Record below once there's enough data."
                   )}
                 </p>
               </>
             ) : (
               <p className="text-sm text-stone-600 dark:text-stone-400 mt-1">
-                Core FX Score ไม่พร้อมใช้งานตอนนี้ -- ไม่สามารถคำนวณคาดการณ์ได้
+                Core FX Score is not available right now -- unable to calculate a forecast.
               </p>
             )}
           </div>
@@ -254,11 +258,12 @@ export default async function Hero({ data }: { data: DashboardData }) {
             </p>
 
             <p className="text-xs text-stone-600 dark:text-stone-400 mt-1">
-              Coverage คือสัดส่วนข้อมูลที่มีใช้จริงตอนนี้ ไม่ใช่ความแม่นยำของคะแนน
+              Coverage is the share of data actually available right now, not the accuracy of the score.
             </p>
 
             <p className="text-xs text-stone-600 dark:text-stone-400 mt-1">
-              Gold ยังไม่รวมในคะแนน แต่ตอนนี้เต็ม 100/100 ได้เมื่อข้อมูลอื่นครบ และจะลดลงถ้าข้อมูลขาดหรือตลาดปิด
+              Gold isn't included in the score yet, but coverage can still reach 100/100 when all other data is
+              complete, and drops when data is missing or the market is closed.
             </p>
           </div>
         </div>

@@ -14,6 +14,6 @@ export default function RefreshControls() {
     return () => clearInterval(interval);
   }, [router]);
 
-  // ไม่แสดง UI
+  // Renders nothing
   return null;
 }
