@@ -30,6 +30,14 @@ type DailyRate = {
   aud_thb: number;
 };
 
+export type BacktestYearResult = {
+  year: string;
+  sampleSize: number;
+  directionalAccuracy: number;
+  mae: number;
+  beatsCoinFlip: boolean;
+};
+
 export type BacktestStrategyResult = {
   name: string;
   description: string;
@@ -43,6 +51,10 @@ export type BacktestStrategyResult = {
   // different question -- direction accuracy above 50%, a coin flip on
   // BULLISH/BEARISH days -- and the two verdicts often disagree.
   beatsCoinFlip: boolean;
+  // Same two numbers, sliced by calendar year -- an aggregate score can
+  // hide a strategy that only worked in one unusual year. Ordered
+  // earliest to latest, one row per year present in the sample.
+  byYear: BacktestYearResult[];
 };
 
 export type BacktestSummary = {
@@ -66,6 +78,26 @@ function direction(movePct: number): Direction {
 
 function average(values: number[]): number {
   return values.reduce((sum, v) => sum + v, 0) / values.length;
+}
+
+function breakdownByYear(years: string[], correct: number[], absErrors: number[]): BacktestYearResult[] {
+  const uniqueYears = Array.from(new Set(years)).sort();
+
+  return uniqueYears.map((year) => {
+    const indices = years.reduce<number[]>((acc, y, i) => {
+      if (y === year) acc.push(i);
+      return acc;
+    }, []);
+    const accuracy = average(indices.map((i) => correct[i]));
+
+    return {
+      year,
+      sampleSize: indices.length,
+      directionalAccuracy: accuracy,
+      mae: average(indices.map((i) => absErrors[i])),
+      beatsCoinFlip: accuracy > 0.5,
+    };
+  });
 }
 
 export async function getBacktestSummary(): Promise<BacktestSummary> {
@@ -98,6 +130,10 @@ export async function getBacktestSummary(): Promise<BacktestSummary> {
 
   const actualMoves: number[] = [];
   const momentumMoves: number[] = [];
+  // The year the prediction would have been made in, i.e. "today" in the
+  // loop below -- not the resolution date -- since that's the year a
+  // strategy using this row would show up in.
+  const years: string[] = [];
 
   for (let i = MOMENTUM_WINDOW_DAYS; i < rates.length - 1; i++) {
     const today = rates[i];
@@ -106,6 +142,7 @@ export async function getBacktestSummary(): Promise<BacktestSummary> {
 
     actualMoves.push(((tomorrow - today) / today) * 100);
     momentumMoves.push(((today - past) / past) * 100);
+    years.push(rows[i].rate_date.slice(0, 4));
   }
 
   const actualDirections = actualMoves.map(direction);
@@ -148,6 +185,7 @@ export async function getBacktestSummary(): Promise<BacktestSummary> {
         beatsBaselineDirectionally: momentumAccuracy > baselineDirectionalAccuracy,
         beatsBaselineOnMae: momentumMae < baselineMae,
         beatsCoinFlip: momentumAccuracy > 0.5,
+        byYear: breakdownByYear(years, momentumCorrect, momentumAbsErrors),
       },
       {
         name: `${MOMENTUM_WINDOW_DAYS}-Day Mean Reversion`,
@@ -157,6 +195,7 @@ export async function getBacktestSummary(): Promise<BacktestSummary> {
         beatsBaselineDirectionally: reversionAccuracy > baselineDirectionalAccuracy,
         beatsBaselineOnMae: reversionMae < baselineMae,
         beatsCoinFlip: reversionAccuracy > 0.5,
+        byYear: breakdownByYear(years, reversionCorrect, reversionAbsErrors),
       },
     ],
     error: null,

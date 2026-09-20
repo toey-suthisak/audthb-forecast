@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getBacktestSummary, NEUTRAL_BAND_PCT } from "@/lib/backtest-data";
+import { getBacktestSummary, NEUTRAL_BAND_PCT, type BacktestYearResult } from "@/lib/backtest-data";
 import Figure from "@/components/Figure";
 import StatusBadge from "@/components/StatusBadge";
 import StatusLight from "@/components/StatusLight";
@@ -13,6 +13,45 @@ function accuracyLabel(value: number) {
 
 function maeLabel(value: number) {
   return `${value.toFixed(3)}%`;
+}
+
+// Collapsible per-year rows for one strategy, same disclosure pattern as
+// the main dashboard's Score Breakdown factors -- an aggregate accuracy
+// number can hide a strategy that only worked in one unusual year.
+function YearBreakdown({ years }: { years: BacktestYearResult[] }) {
+  return (
+    <details className="group mt-3">
+      <summary className="flex items-center gap-2 text-xs font-semibold text-stone-600 dark:text-stone-400 cursor-pointer list-none marker:content-none">
+        <svg
+          viewBox="0 0 20 20"
+          fill="none"
+          className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90"
+        >
+          <path d="M7 4l6 6-6 6" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        Year-by-year breakdown
+      </summary>
+
+      <div className="mt-2 pl-5 divide-y divide-stone-200 dark:divide-stone-800">
+        {years.map((y) => (
+          <div key={y.year} className="flex items-center justify-between gap-3 py-1.5">
+            <p className="text-xs text-stone-600 dark:text-stone-400">
+              {y.year} <span className="text-stone-500">({y.sampleSize}d)</span>
+            </p>
+            <div className="flex items-center gap-4">
+              <Figure
+                value={accuracyLabel(y.directionalAccuracy)}
+                className={`text-xs font-semibold ${
+                  y.beatsCoinFlip ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"
+                }`}
+              />
+              <Figure value={maeLabel(y.mae)} className="text-xs text-stone-600 dark:text-stone-400" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
 }
 
 export default async function BacktestPage() {
@@ -127,6 +166,8 @@ export default async function BacktestPage() {
                         />
                       </div>
                     </div>
+
+                    <YearBreakdown years={s.byYear} />
                   </div>
                 ))}
               </div>
