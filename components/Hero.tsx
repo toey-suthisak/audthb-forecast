@@ -1,6 +1,8 @@
 import type { DashboardData } from "@/lib/dashboard-data";
 import { getEventRisk } from "@/lib/event-calendar-data";
 import { getConfidence, type ConfidenceLevel } from "@/lib/confidence-data";
+import { buildForecast, FORECAST_VERSION, type ForecastDirection } from "@/lib/forecast-data";
+import { getEvaluationSummary } from "@/lib/evaluation-data";
 import StatusBadge, { type BadgeTone } from "@/components/StatusBadge";
 import ScoreGauge from "@/components/ScoreGauge";
 import InfoTip from "@/components/InfoTip";
@@ -38,6 +40,12 @@ function scoreTextColor(score: number | null) {
   return "text-amber-700 dark:text-amber-400";
 }
 
+function forecastDirectionColor(direction: ForecastDirection) {
+  if (direction === "BULLISH") return "text-emerald-700 dark:text-emerald-400";
+  if (direction === "BEARISH") return "text-red-700 dark:text-red-400";
+  return "text-stone-700 dark:text-stone-300";
+}
+
 function coreFeeds(data: DashboardData) {
   return [
     { label: "Direct", status: data.directFreshness.status },
@@ -56,6 +64,18 @@ function feedDotColor(status: string) {
 export default async function Hero({ data }: { data: DashboardData }) {
   const eventRisk = await getEventRisk();
   const confidence = await getConfidence(data);
+
+  const referenceRate = data.latestPrice ? Number(data.latestPrice.rate) : null;
+  const forecast = data.coreFxScore !== null ? buildForecast(data.coreFxScore, referenceRate) : null;
+
+  // Track Record's own numbers for this exact horizon/version, reused
+  // here so the caveat next to the prediction states the model's actual
+  // measured performance instead of a static "not tested yet" -- the
+  // same honesty rule the backtest page follows for its badges.
+  const evaluation = await getEvaluationSummary();
+  const dailyTrackRecord = evaluation.groups.find(
+    (g) => g.horizon === "DAILY" && g.forecastVersion === FORECAST_VERSION,
+  );
 
   return (
     <div className="p-6 sm:p-8">
@@ -142,13 +162,43 @@ export default async function Hero({ data }: { data: DashboardData }) {
           </div>
 
           <div className="mt-5 pt-4 border-t border-stone-200 dark:border-stone-800">
-            <p className="text-xs font-medium text-stone-600 dark:text-stone-400 uppercase tracking-widest">
-              Daily Forecast
+            <p className="text-xs font-medium text-stone-600 dark:text-stone-400 uppercase tracking-widest inline-flex items-center">
+              Daily Forecast (24H)
+              <InfoTip text="Derived from today's Core FX Score using a fixed, uncalibrated formula -- it is not a statistically fitted prediction. Track Record below is the only honest measure of how well it actually performs." />
             </p>
-            <p className="text-sm text-stone-600 dark:text-stone-400 mt-1 leading-relaxed">
-              โมเดลคำนวณคาดการณ์ล่วงหน้า 24 ชม. อยู่เบื้องหลังทุกชั่วโมงอยู่แล้ว
-              แต่ยังไม่โชว์ตัวเลขจนกว่า Track Record ด้านล่างจะมีข้อมูลพอยืนยันว่าแม่นกว่าเดา
-            </p>
+
+            {forecast ? (
+              <>
+                <div className="flex items-baseline gap-2 mt-2">
+                  <p className={`text-2xl font-semibold ${forecastDirectionColor(forecast.predictedDirection)}`}>
+                    {forecast.predictedDirection}
+                  </p>
+                  <StatusBadge label="Uncalibrated" tone="amber" />
+                </div>
+                <p className="text-sm text-stone-600 dark:text-stone-400 mt-1">
+                  Predicted move {forecast.predictedMovePct >= 0 ? "+" : ""}
+                  {forecast.predictedMovePct.toFixed(2)}% -- range {forecast.predictedRangeLowPct.toFixed(2)}% to{" "}
+                  {forecast.predictedRangeHighPct.toFixed(2)}%
+                </p>
+
+                <p className="text-xs text-stone-600 dark:text-stone-400 mt-2 leading-relaxed">
+                  {dailyTrackRecord && !dailyTrackRecord.insufficientData ? (
+                    <>
+                      ยังไม่พิสูจน์ว่าแม่นกว่าเดา: จาก {dailyTrackRecord.sampleSize} ครั้งที่ผ่านมา ทายทิศทางถูก{" "}
+                      {(dailyTrackRecord.model.directionalAccuracy! * 100).toFixed(1)}% (baseline ทายว่านิ่งเฉย ๆ ถูก{" "}
+                      {(dailyTrackRecord.baselineNoChange.directionalAccuracy! * 100).toFixed(1)}%) และค่าเฉลี่ยความคลาดเคลื่อน{" "}
+                      {dailyTrackRecord.beatsBaseline.onMae ? "ดีกว่า" : "แย่กว่าหรือพอ ๆ กับ"} baseline -- ดูตัวเลขเต็มที่ Track Record ด้านล่าง
+                    </>
+                  ) : (
+                    "ยังสะสมข้อมูลไม่พอยืนยันความแม่นยำ (ต้องการอย่างน้อย 20 ครั้งที่ resolved แล้ว) ดู Track Record ด้านล่างเมื่อมีข้อมูลพอ"
+                  )}
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-stone-600 dark:text-stone-400 mt-1">
+                Core FX Score ไม่พร้อมใช้งานตอนนี้ -- ไม่สามารถคำนวณคาดการณ์ได้
+              </p>
+            )}
           </div>
         </div>
 
