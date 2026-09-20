@@ -44,7 +44,7 @@ export default async function Evaluation() {
                   <span className="text-xs font-normal text-stone-600 dark:text-stone-400">v{g.forecastVersion}</span>
                 </p>
                 <p className="text-xs text-stone-600 dark:text-stone-400">
-                  {g.sampleSize}/{g.minSampleSize} resolved
+                  {g.sampleSize} resolved
                 </p>
               </div>
 

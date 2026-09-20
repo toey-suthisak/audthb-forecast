@@ -37,6 +37,12 @@ export type BacktestStrategyResult = {
   mae: number;
   beatsBaselineDirectionally: boolean;
   beatsBaselineOnMae: boolean;
+  // Beating the no-change baseline is a very low bar on a series that's
+  // almost never exactly flat (see baselineDirectionalAccuracy below,
+  // usually under 5%). Whether the strategy is actually predictive is a
+  // different question -- direction accuracy above 50%, a coin flip on
+  // BULLISH/BEARISH days -- and the two verdicts often disagree.
+  beatsCoinFlip: boolean;
 };
 
 export type BacktestSummary = {
@@ -141,6 +147,7 @@ export async function getBacktestSummary(): Promise<BacktestSummary> {
         mae: momentumMae,
         beatsBaselineDirectionally: momentumAccuracy > baselineDirectionalAccuracy,
         beatsBaselineOnMae: momentumMae < baselineMae,
+        beatsCoinFlip: momentumAccuracy > 0.5,
       },
       {
         name: `${MOMENTUM_WINDOW_DAYS}-Day Mean Reversion`,
@@ -149,6 +156,7 @@ export async function getBacktestSummary(): Promise<BacktestSummary> {
         mae: reversionMae,
         beatsBaselineDirectionally: reversionAccuracy > baselineDirectionalAccuracy,
         beatsBaselineOnMae: reversionMae < baselineMae,
+        beatsCoinFlip: reversionAccuracy > 0.5,
       },
     ],
     error: null,

@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
 import RefreshControls from "@/components/RefreshControls";
 import StickyBar from "@/components/StickyBar";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -13,6 +12,7 @@ import MarketClock from "@/components/MarketClock";
 import EventCalendar from "@/components/EventCalendar";
 import NewsSentiment from "@/components/NewsSentiment";
 import Evaluation from "@/components/Evaluation";
+import BacktestPreview from "@/components/BacktestPreview";
 import TrendChart from "@/components/TrendChart";
 import ActionSummary from "@/components/ActionSummary";
 
@@ -218,6 +218,11 @@ export default async function Home() {
           {/* TRACK RECORD */}
           <Evaluation />
 
+          {/* BACKTEST -- a different question from Track Record above:
+          historical price-only strategies against RBA's free daily
+          series, not a replay of the live model. */}
+          <BacktestPreview />
+
           {/* CONTEXT & NEWS */}
           <div className="px-6 pt-6">
             <SectionLabel color="amber" icon={<CalendarIcon />}>Context &amp; News</SectionLabel>
@@ -237,17 +242,9 @@ export default async function Home() {
           "Sources" heading it already has. */}
 
           <div className="p-6">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold tracking-tight text-stone-600 dark:text-stone-400">
-                Sources
-              </h2>
-              <Link
-                href="/backtest"
-                className="text-xs font-medium text-brass-700 dark:text-brass-400 hover:underline underline-offset-2"
-              >
-                Backtest &rarr;
-              </Link>
-            </div>
+            <h2 className="text-sm font-semibold tracking-tight text-stone-600 dark:text-stone-400">
+              Sources
+            </h2>
 
             <div className="mt-4 text-sm text-stone-600 dark:text-stone-400 grid sm:grid-cols-2 gap-x-8 gap-y-2">
             <p>
