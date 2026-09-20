@@ -9,7 +9,8 @@ import CrossCheck from "@/components/CrossCheck";
 import Alerts from "@/components/Alerts";
 import DailyRecap from "@/components/DailyRecap";
 import MarketClock from "@/components/MarketClock";
-import EventCalendar from "@/components/EventCalendar";
+import TodayEvents from "@/components/TodayEvents";
+import MarketConsensus from "@/components/MarketConsensus";
 import NewsSentiment from "@/components/NewsSentiment";
 import Evaluation from "@/components/Evaluation";
 import BacktestPreview from "@/components/BacktestPreview";
@@ -231,13 +232,10 @@ export default async function Home() {
             <SectionLabel color="amber" icon={<CalendarIcon />}>Context &amp; News</SectionLabel>
           </div>
 
+          <TodayEvents today={eventCalendar.today} coverageNote={eventCalendar.coverageNote} />
+
           <div className="grid lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-stone-200 dark:divide-stone-800">
-            <EventCalendar
-              today={eventCalendar.today}
-              thisWeek={eventCalendar.thisWeek}
-              coverageNote={eventCalendar.coverageNote}
-              consensus={economicConsensus.events}
-            />
+            <MarketConsensus consensus={economicConsensus.events} />
             <NewsSentiment signals={newsSentiment.signals} error={newsSentiment.error} />
           </div>
 
