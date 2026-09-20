@@ -58,11 +58,11 @@ const SECTION_COLOR_CLASSES: Record<SectionColor, string> = {
   amber: "text-amber-600 dark:text-amber-400",
 };
 
-// A very quiet nod to which FX session is live right now -- named in
-// text (never color alone) next to the masthead's clock, and echoed as a
-// barely-there change in the rule line beneath it, per the almanac
-// direction's session-time raise. Bangkok-hour buckets, not a precise
-// open/close model.
+// A very quiet nod to which FX session is live right now -- no longer
+// named in text next to the masthead's clock (removed 2026-09-20: it
+// read as misleading when shown next to a MARKET_CLOSED badge), just a
+// barely-there change in the rule line beneath it. Bangkok-hour
+// buckets, not a precise open/close model.
 function marketSession(bangkokHour: number): { label: string; ruleClassName: string } {
   if (bangkokHour >= 6 && bangkokHour < 14) {
     return { label: "Asian session", ruleClassName: "border-brass-900/25" };
@@ -149,8 +149,7 @@ export default async function Home() {
 
       {/* MASTHEAD -- the almanac's title band: a fixed near-black band
       independent of the light/dark page theme (a printed masthead
-      doesn't relight), a date line like a daily almanac page, and the
-      current FX session named in text beside the clock. */}
+      doesn't relight), and a date line like a daily almanac page. */}
 
       <div className={`bg-masthead border-b ${session.ruleClassName}`}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
@@ -167,7 +166,7 @@ export default async function Home() {
               </span>
 
               <span className="text-xs font-medium uppercase tracking-widest text-emerald-400">
-                Live -- {session.label}
+                Live
               </span>
             </div>
           </div>
