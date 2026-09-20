@@ -1,6 +1,6 @@
 # AUD/THB Forecast Dashboard — Project Status
 
-Last verified against live code + Supabase: 2026-09-18. Replaces the 2026-09-16
+Last verified against live code + Supabase: 2026-09-20. Replaces the 2026-09-16
 version of this file, which described a pre-redesign ZIP snapshot (component
 names like `CurrentRateCard`/`DataHealth.tsx`, the old `/api/macro-status`-era
 routes, a stale SHA256 file inventory) that no longer matches the codebase.
@@ -21,25 +21,45 @@ a schedule (`select * from cron.job` for the current list).
 |---|---|---|
 | A | Ingest (FX, commodities, yields, macro, news) | Live -- see `app/api/*` routes, each with its own cron |
 | B | Score snapshot (`fx_score_snapshots`) | Live |
-| C | Forecast engine (`forecast_runs`) | Live in the backend (hourly, 24h horizon, `lib/forecast-data.ts`) but **not surfaced as a number in the UI** -- see below |
+| C | Forecast engine (`forecast_runs`) | Live in the backend (hourly, 24h horizon, `lib/forecast-data.ts`) **and surfaced as a number in Hero's Daily Forecast panel as of 2026-09-20** -- see below |
 | D | Outcome matching (`forecast_outcomes`) | Live -- `update-forecast-outcome-hourly` cron |
 | E | Evaluation (accuracy vs. a naive baseline) | Live -- `lib/evaluation-data.ts` + "Track Record" card on the dashboard |
 | F | Confidence | Live -- `lib/confidence-data.ts`, badge next to Core FX Score in Hero |
 | G | Event Risk | Live -- `lib/event-calendar-data.ts`, surfaces into Hero/Alerts/Event Calendar from one shared table |
 | H | Action (plain-language signal summary) | Live, deliberately descriptive not prescriptive -- `lib/action-data.ts` / `components/ActionSummary.tsx` |
 | I | UI | Full redesign done: gradient header, per-section accent colors, 7-day trend sparklines, dismissible Alerts popup |
+| J | Backtest (`backtest_daily_rates`) | Live -- `/backtest` page + `BacktestPreview` on the dashboard, `lib/backtest-data.ts`. Auto-updated daily -- see below |
 
-**Why Daily Forecast still shows no number**: `forecast_runs` has been resolving
-into `forecast_outcomes` since 2026-09-18, but Evaluation's `MIN_SAMPLE_SIZE`
-gate is 20 matched outcomes per horizon/version before it reports a real
-percentage instead of "insufficient data." Check the Track Record card for the
-current count. Do not turn on a live forecast number in Hero before that gate
-clears -- there was a real bug earlier (evaluation read `direction_correct`/
-`within_range` columns that the outcome job intentionally always left null)
-that would have silently shown a permanent 0% accuracy; it's fixed now
-(evaluation computes both fields itself), but the underlying model
-(`FORECAST_VERSION` 1.0.0) is still explicitly labeled "UNCALIBRATED" in its
-own code comments.
+**Daily Forecast now shows a number -- deliberately, before it clearly beats a
+baseline**: as of 2026-09-18, `forecast_runs` had 46 matched outcomes for
+`DAILY`/`1.0.0`, clearing Evaluation's `MIN_SAMPLE_SIZE` gate of 20. The
+number itself is still weak (10.9% direction accuracy vs. a 6.5% no-change
+baseline; MAE roughly tied, not clearly better) -- this file previously said
+"do not turn on a live forecast number before that gate clears," but the
+gate is sample size, not accuracy, and the user explicitly asked to reveal it
+anyway after being shown those exact numbers. Hero now shows the live
+UNCALIBRATED prediction (direction/move/range from `buildForecast`) with an
+"Uncalibrated" badge and a caveat line that pulls Track Record's *current*
+numbers live (via `getEvaluationSummary`) rather than a static disclaimer, so
+if/when the model's real accuracy changes, the caveat text updates with it.
+There was a real bug earlier (evaluation read `direction_correct`/
+`within_range` columns that the outcome job intentionally always left null,
+which would have silently shown a permanent 0% accuracy); it's fixed now
+(evaluation computes both fields itself from `actual_move_pct` instead).
+
+**Backtest (workflow J) is now on a live cron, not just a one-time
+backfill**: `app/api/backtest-update` (CRON_SECRET-gated, same pattern as
+every other ingest route) fetches RBA's F11.1 CSV and upserts rows newer
+than `max(rate_date)`. Runs weekdays 08:00 UTC (`update-backtest-daily` in
+`cron.job`, comfortably after RBA's ~4pm AEST/AEDT publish time). Notable
+finding: RBA's Akamai bot detection blocks curl outright (HTTP 403 even with
+full browser headers spoofed), but a plain Node `fetch()` with an ordinary
+User-Agent passes -- verified manually, then end-to-end against the live
+table before wiring the cron up. If the backtest ever looks stale again,
+check `select max(rate_date) from backtest_daily_rates` first -- RBA could
+tighten bot detection further with no warning, and this cron would then
+start silently no-op'ing (it fails safely, never writes bad data) rather
+than erroring loudly.
 
 ## Current model weights (MODEL_VERSION 1.3.0)
 
