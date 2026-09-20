@@ -64,7 +64,7 @@ function CalendarTable({ events }: { events: FfCalendarEvent[] }) {
               className="border-b border-stone-200 dark:border-stone-800 last:border-b-0"
             >
               <td className="py-2 pr-3 text-xs text-stone-500 dark:text-stone-500 font-mono whitespace-nowrap">
-                {event.eventTime ?? "--"}
+                {event.impact === "Holiday" ? "All Day" : (event.eventTime ?? "--")}
               </td>
               <td className="py-2 pr-3 text-xs font-semibold whitespace-nowrap">{event.currency}</td>
               <td className="py-2 pr-3">
@@ -172,9 +172,10 @@ export default async function EconomicCalendarPage({
 
         <p className="text-xs text-stone-600 dark:text-stone-400 mt-6 leading-relaxed">
           Source: ForexFactory&apos;s public weekly calendar export, fetched once daily (their own page asks not to be
-          fetched more than once an hour). FF&apos;s export uses US Eastern wall-clock time -- converted here to
-          Bangkok time, so a late-US-Eastern-evening event may show under the next Bangkok calendar day. A handful of
-          entries have no specific time and can&apos;t be converted; those keep FF&apos;s own date.
+          fetched more than once an hour). FF&apos;s export gives times in UTC, converted here to Bangkok time, so a
+          late-UTC-evening event may show under the next Bangkok calendar day. Holiday entries show as all-day (the
+          feed carries a placeholder time for them, same as forexfactory.com&apos;s own site); a few other entries
+          have no specific time at all and keep the feed&apos;s own date.
         </p>
       </div>
     </main>

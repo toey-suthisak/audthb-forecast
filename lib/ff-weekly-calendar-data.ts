@@ -7,23 +7,28 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 // table from economic_consensus (which is AUD/USD/THB-scoped and
 // drives the homepage's directional-lean feature).
 //
-// FF's own weekly export is documented (by the community tools that
-// parse it -- FF itself doesn't state this in the feed) to use US
-// Eastern wall-clock time. Converted here to a real UTC instant via
-// Intl (so it's correct across the EDT/EST boundary with no manual DST
-// table), then re-bucketed into Asia/Bangkok calendar days -- this
-// project's own timezone -- for both the day tabs and each event's
-// displayed time. An event with no time at all (a handful of
-// day-long/no-specific-time entries) can't be converted -- it keeps
-// its original FF date and no displayed time, rather than guessing a
-// clock time that isn't there.
+// FF's weekly export's raw date/time is plain UTC -- NOT US Eastern as
+// widely assumed (including by an earlier version of this file, which
+// treated it as America/New_York and was consistently 4 hours late
+// against forexfactory.com's own displayed times, confirmed by direct
+// comparison on 2026-09-20: e.g. "RBA Gov Bullock Speaks" reads 10:10am
+// on FF's site vs the wrongly-converted 2:10pm here). Converted directly
+// to Asia/Bangkok (+7h, no DST either side) for both the day tabs and
+// each event's displayed time.
+//
+// Holiday-impact entries carry a dummy time in the feed (FF's own site
+// shows them as "All Day", not that time) -- kept under their own raw
+// UTC date with no displayed time, rather than day-shifting on a
+// meaningless clock value.
+//
+// An event with no time at all can't be bucketed by time either -- it
+// keeps its original UTC date and no displayed time.
 
-const SOURCE_TIME_ZONE = "America/New_York";
 const DISPLAY_TIME_ZONE = "Asia/Bangkok";
 
 export type FfCalendarEvent = {
-  eventDate: string; // Asia/Bangkok calendar date, YYYY-MM-DD (or FF's own date if time-of-day is unknown)
-  eventTime: string | null; // Asia/Bangkok wall-clock time (or FF's raw string if unconverted)
+  eventDate: string; // Asia/Bangkok calendar date, YYYY-MM-DD (or the feed's own UTC date for Holiday/no-time entries)
+  eventTime: string | null; // Asia/Bangkok wall-clock time, or null for Holiday/no-time entries
   currency: string;
   eventName: string;
   impact: string;
@@ -45,44 +50,6 @@ type DbRow = {
   actual_value: string | null;
   source_url: string | null;
 };
-
-// Standard Intl-based zoned-wall-clock -> UTC conversion: guess UTC from
-// the wall-clock numbers, find what that guess reads as in the source
-// zone, and correct by the difference. No DST table needed -- the
-// browser/Node ICU data already knows America/New_York's rules.
-function getZoneOffsetMinutes(date: Date, timeZone: string): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  })
-    .formatToParts(date)
-    .reduce<Record<string, string>>((acc, p) => {
-      if (p.type !== "literal") acc[p.type] = p.value;
-      return acc;
-    }, {});
-
-  const asUtc = Date.UTC(
-    Number(parts.year),
-    Number(parts.month) - 1,
-    Number(parts.day),
-    Number(parts.hour),
-    Number(parts.minute),
-    Number(parts.second),
-  );
-  return (asUtc - date.getTime()) / 60000;
-}
-
-function zonedWallClockToUtc(year: number, month: number, day: number, hour: number, minute: number, timeZone: string): Date {
-  const utcGuess = new Date(Date.UTC(year, month - 1, day, hour, minute));
-  const offsetMinutes = getZoneOffsetMinutes(utcGuess, timeZone);
-  return new Date(utcGuess.getTime() - offsetMinutes * 60000);
-}
 
 function parseFfClockTime(raw: string): { hour: number; minute: number } | null {
   const match = raw.trim().match(/^(\d{1,2}):(\d{2})(am|pm)$/i);
@@ -114,14 +81,15 @@ function bangkokTimeLabel(utc: Date): string {
 
 function toFfCalendarEvent(row: DbRow): FfCalendarEvent {
   const [year, month, day] = row.event_date.split("-").map(Number);
-  const clock = row.event_time ? parseFfClockTime(row.event_time) : null;
+  const isAllDay = row.impact === "Holiday";
+  const clock = !isAllDay && row.event_time ? parseFfClockTime(row.event_time) : null;
 
   let eventDate = row.event_date;
-  let eventTime = row.event_time;
+  let eventTime: string | null = isAllDay ? null : row.event_time;
   let sortKey = Date.UTC(year, month - 1, day);
 
   if (clock) {
-    const utc = zonedWallClockToUtc(year, month, day, clock.hour, clock.minute, SOURCE_TIME_ZONE);
+    const utc = new Date(Date.UTC(year, month - 1, day, clock.hour, clock.minute));
     eventDate = bangkokDateKey(utc);
     eventTime = bangkokTimeLabel(utc);
     sortKey = utc.getTime();
