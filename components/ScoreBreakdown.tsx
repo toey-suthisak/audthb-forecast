@@ -95,7 +95,7 @@ function Factor({
       className="group border-b border-stone-200 dark:border-stone-800 last:border-b-0"
       open={defaultOpen}
     >
-      <summary className="flex items-center justify-between gap-3 py-4 cursor-pointer list-none marker:content-none">
+      <summary className="flex items-center justify-between gap-3 py-3 cursor-pointer list-none marker:content-none">
         <div className="flex items-center gap-3 min-w-0">
           <svg
             viewBox="0 0 20 20"
