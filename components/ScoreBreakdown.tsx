@@ -7,6 +7,7 @@ import { getTradeBalanceData } from "@/lib/trade-balance-data";
 import StatusBadge, { type BadgeTone } from "@/components/StatusBadge";
 import InfoTip from "@/components/InfoTip";
 import Figure from "@/components/Figure";
+import StatusLight from "@/components/StatusLight";
 
 // Every one of these returns null (never a "--" string) on a missing
 // value, so every call site renders through <Figure>, which is what
@@ -71,25 +72,39 @@ function freshnessTone(status: string): BadgeTone {
   return "red";
 }
 
-// Always fully shown -- no tap-to-expand. Each factor's underlying
-// data is right there, not behind an interaction.
+// Each factor collapses behind <details>/<summary> -- no JS needed, and
+// it turns what used to be one long always-open list (a real problem on
+// mobile) into a scannable set of rows you open one at a time.
 function Factor({
   name,
   tooltip,
   score,
   weightLabel,
+  defaultOpen = false,
   children,
 }: {
   name: string;
   tooltip?: string;
   score: number | null;
   weightLabel: string;
+  defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div className="border-b border-stone-200 dark:border-stone-800 last:border-b-0 py-4">
-      <div className="flex items-center justify-between gap-3">
+    <details
+      className="group border-b border-stone-200 dark:border-stone-800 last:border-b-0"
+      open={defaultOpen}
+    >
+      <summary className="flex items-center justify-between gap-3 py-4 cursor-pointer list-none marker:content-none">
         <div className="flex items-center gap-3 min-w-0">
+          <svg
+            viewBox="0 0 20 20"
+            fill="none"
+            className="h-4 w-4 shrink-0 text-stone-600 dark:text-stone-400 transition-transform group-open:rotate-90"
+          >
+            <path d="M7 4l6 6-6 6" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+
           <span className="font-semibold truncate">{name}</span>
           {tooltip && <InfoTip text={tooltip} />}
         </div>
@@ -98,10 +113,10 @@ function Factor({
           <span className="text-xs text-stone-600 hidden sm:inline">{weightLabel}</span>
           <SegmentScore score={score} />
         </div>
-      </div>
+      </summary>
 
-      <div className="pt-3 space-y-4">{children}</div>
-    </div>
+      <div className="pb-4 pl-7 space-y-4">{children}</div>
+    </details>
   );
 }
 
@@ -127,10 +142,27 @@ export default async function ScoreBreakdown({
   const tradeBalance = await getTradeBalanceData();
 
   return (
-    <div>
-      <p className="text-sm text-stone-600 dark:text-stone-400">Factors behind this score</p>
+    <div className="p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div className="inline-flex items-center">
+          <StatusLight colorClassName="text-brass-500 dark:text-brass-400" />
+          <p className="text-xs text-stone-600 dark:text-stone-400">Tap a factor to see how it's calculated.</p>
+        </div>
 
-      <div className="mt-2">
+        <div className="text-right shrink-0">
+          <p className="text-xs text-stone-600 dark:text-stone-400 uppercase tracking-wide inline-flex items-center">
+            Core FX Score
+            <InfoTip text="One score combining 7 market and economic signals: -100 (bearish AUD) to +100 (bullish AUD). Not a price prediction." />
+          </p>
+          <Figure
+            value={data.coreFxScore !== null ? String(data.coreFxScore) : null}
+            className={`text-2xl font-semibold ${scoreTextColor(data.coreFxScore)}`}
+          />
+          <p className="text-xs text-stone-600 dark:text-stone-400">{data.coreBias}</p>
+        </div>
+      </div>
+
+      <div className="mt-4 pt-2 border-t border-stone-200 dark:border-stone-800">
         {/* PRICE */}
         <Factor
           name="Price / Momentum"
