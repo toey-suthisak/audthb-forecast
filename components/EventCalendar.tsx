@@ -1,5 +1,5 @@
 import type { CalendarEvent } from "@/lib/event-calendar-data";
-import type { ConsensusEvent } from "@/lib/economic-consensus-data";
+import type { ConsensusEvent, ConsensusLean } from "@/lib/economic-consensus-data";
 import StatusBadge, { type BadgeTone } from "@/components/StatusBadge";
 import StatusLight from "@/components/StatusLight";
 import InfoTip from "@/components/InfoTip";
@@ -35,10 +35,36 @@ function formatEventDate(eventDate: string) {
   });
 }
 
+function leanLabel(currency: string, lean: ConsensusLean) {
+  if (lean === "BULLISH") return `${currency} ↑`;
+  if (lean === "BEARISH") return `${currency} ↓`;
+  return "NEUTRAL";
+}
+
+function leanTone(lean: ConsensusLean): BadgeTone {
+  if (lean === "BULLISH") return "emerald";
+  if (lean === "BEARISH") return "red";
+  return "slate";
+}
+
+function leanTooltip(event: ConsensusEvent) {
+  const basis =
+    event.leanBasis === "actual_vs_forecast"
+      ? "actual vs. forecast (the real surprise)"
+      : "forecast vs. previous (the expected direction of change)";
+
+  return (
+    `Derived from ${basis} using a hand-coded textbook polarity for this indicator type (e.g. higher employment is ` +
+    `bullish, higher unemployment is bearish) -- our own convention, not ForexFactory's own guidance. For a USD ` +
+    `event this is USD's own direction, not a translated AUD/THB call: a stronger USD tends to pressure both AUD ` +
+    "and THB together, so the net effect on this specific pair is muted, not simply 'AUD down'."
+  );
+}
+
 function ConsensusRow({ event }: { event: ConsensusEvent }) {
   return (
     <div className="flex items-start justify-between gap-3 py-2 border-b border-stone-200 dark:border-stone-800 last:border-b-0">
-      <div>
+      <div className="min-w-0">
         <p className="text-sm">
           <span className={`font-semibold ${importanceColor(event.impact)}`}>{event.currency}</span>{" "}
           {event.eventName}
@@ -66,7 +92,15 @@ function ConsensusRow({ event }: { event: ConsensusEvent }) {
         </p>
       </div>
 
-      <p className="text-xs text-stone-600 dark:text-stone-400 shrink-0">{formatEventDate(event.eventDate)}</p>
+      <div className="shrink-0 text-right">
+        {event.lean && (
+          <div className="inline-flex items-center">
+            <StatusBadge label={leanLabel(event.currency, event.lean)} tone={leanTone(event.lean)} />
+            <InfoTip text={leanTooltip(event)} />
+          </div>
+        )}
+        <p className="text-xs text-stone-600 dark:text-stone-400 mt-1">{formatEventDate(event.eventDate)}</p>
+      </div>
     </div>
   );
 }
@@ -147,7 +181,7 @@ export default function EventCalendar({
         <div className="mt-4 pt-4 border-t border-stone-200 dark:border-stone-800">
           <p className="text-sm text-stone-600 dark:text-stone-400 mb-1 inline-flex items-center">
             Market Consensus
-            <InfoTip text="Forecast/previous values for this week's AUD/USD releases, from ForexFactory's public calendar. Shown as-is, not scored -- an indicator's 'surprise' direction (higher-is-bullish vs higher-is-bearish) varies by type, so read direction yourself rather than treating this as a signal." />
+            <InfoTip text="Forecast/previous/actual values for this week's AUD/USD releases, from ForexFactory's public calendar. The up/down badge (where shown) is our own hand-coded textbook polarity for a handful of common indicator types, not ForexFactory's own guidance -- a reading aid, not a tested signal. No badge means the indicator type isn't in that list; read the raw numbers yourself." />
           </p>
 
           <div>
