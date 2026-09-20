@@ -11,18 +11,18 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 // =========================================================
 
 const FEED_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.xml";
-const RELEVANT_CURRENCIES = new Set(["AUD", "USD"]);
-// HIGH only -- MEDIUM cluttered the homepage's curated Market Consensus
-// list without adding much (Consumer Sentiment, Unemployment Claims,
-// etc.); every impact level is still available on the full
-// /economic-calendar page via ff_weekly_calendar below.
-const RELEVANT_IMPACTS = new Set(["High"]);
+// Every currency, HIGH and MEDIUM impact -- not just AUD/USD. Global
+// risk-sentiment-moving events (ECB, SNB, BOJ, etc.) matter too, and
+// this is still a small, curated subset: every impact level and
+// currency is separately available in full on /economic-calendar via
+// ff_weekly_calendar below.
+const RELEVANT_IMPACTS = new Set(["High", "Medium"]);
 
 type ParsedEvent = {
   eventDate: string; // YYYY-MM-DD
   currency: string;
   eventName: string;
-  impact: "HIGH";
+  impact: "HIGH" | "MEDIUM";
   forecastValue: string | null;
   previousValue: string | null;
   actualValue: string | null;
@@ -57,7 +57,7 @@ export function parseFfCalendar(xml: string): ParsedEvent[] {
 
   for (const block of blocks) {
     const currency = extractTag(block, "country");
-    if (!currency || !RELEVANT_CURRENCIES.has(currency)) continue;
+    if (!currency) continue;
 
     const impactRaw = extractTag(block, "impact");
     if (!impactRaw || !RELEVANT_IMPACTS.has(impactRaw)) continue;
@@ -73,7 +73,7 @@ export function parseFfCalendar(xml: string): ParsedEvent[] {
       eventDate,
       currency,
       eventName: title,
-      impact: "HIGH",
+      impact: impactRaw === "High" ? "HIGH" : "MEDIUM",
       forecastValue: extractTag(block, "forecast"),
       previousValue: extractTag(block, "previous"),
       actualValue: extractTag(block, "actual"),

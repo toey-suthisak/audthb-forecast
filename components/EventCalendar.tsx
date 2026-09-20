@@ -54,11 +54,16 @@ function leanTooltip(event: ConsensusEvent) {
       ? "actual vs. forecast (the real surprise)"
       : "forecast vs. previous (the expected direction of change)";
 
+  const pairNote =
+    event.currency === "AUD"
+      ? ""
+      : ` This is ${event.currency}'s own direction, not a translated AUD/THB call -- a stronger ${event.currency} ` +
+        "doesn't necessarily mean a weaker AUD/THB (e.g. a stronger USD tends to pressure both AUD and THB together, " +
+        "so that pair's net effect is muted, not simply 'AUD down'). Judge relevance to AUD/THB yourself.";
+
   return (
     `Derived from ${basis} using a hand-coded textbook polarity for this indicator type (e.g. higher employment is ` +
-    `bullish, higher unemployment is bearish) -- our own convention, not ForexFactory's own guidance. For a USD ` +
-    `event this is USD's own direction, not a translated AUD/THB call: a stronger USD tends to pressure both AUD ` +
-    "and THB together, so the net effect on this specific pair is muted, not simply 'AUD down'."
+    `bullish, higher unemployment is bearish) -- our own convention, not ForexFactory's own guidance.${pairNote}`
   );
 }
 
@@ -184,7 +189,7 @@ export default function EventCalendar({
         <div className="mt-4 pt-4 border-t border-stone-200 dark:border-stone-800">
           <p className="text-sm text-stone-600 dark:text-stone-400 mb-1 inline-flex items-center">
             Market Consensus
-            <InfoTip text="Forecast/previous/actual values for this week's AUD/USD releases, from ForexFactory's public calendar. The up/down badge (where shown) is our own hand-coded textbook polarity for a handful of common indicator types, not ForexFactory's own guidance -- a reading aid, not a tested signal. No badge means the indicator type isn't in that list; read the raw numbers yourself." />
+            <InfoTip text="Forecast/previous/actual values for this week's High/Medium-impact releases across every currency, from ForexFactory's public calendar. The up/down badge (where shown) is our own hand-coded textbook polarity for a handful of common indicator types, not ForexFactory's own guidance -- a reading aid, not a tested signal. No badge means the indicator type isn't in that list; read the raw numbers yourself. For a non-AUD/USD currency, this is that currency's own direction, not a translated AUD/THB call." />
           </p>
 
           <div>
