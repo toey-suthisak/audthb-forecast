@@ -15,6 +15,8 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 // supabase/migrations/20260920_create_backtest_daily_rates.sql). RBA
 // publishes AUD/THB directly, calculated the same way every day, so
 // this is a clean, authoritative daily series with no key or quota.
+// Topped up daily by app/api/backtest-update (a Supabase Cron job), on
+// top of the original one-time historical backfill.
 //
 // Same statistical framework as lib/evaluation-data.ts, so the numbers
 // mean the same thing in both places: a move under NEUTRAL_BAND_PCT is

@@ -214,7 +214,8 @@ export default async function BacktestPage() {
           {neutralLabel} counts as &quot;no real move,&quot; the no-change baseline always predicts no move, and MAE
           is the average absolute error against the actual next-day move. Momentum bets tomorrow continues the
           trailing 5-day direction; Mean Reversion bets it reverses. Data is {summary.dataSource}&apos;s official
-          daily fixing, loaded as a one-time historical backfill (a manual periodic refresh, not a live cron -- see{" "}
+          daily fixing, seeded by a one-time historical backfill and topped up daily by a cron job that fetches the
+          same published series (see{" "}
           <code className="text-[11px]">supabase/migrations/20260920_create_backtest_daily_rates.sql</code>).
         </p>
 

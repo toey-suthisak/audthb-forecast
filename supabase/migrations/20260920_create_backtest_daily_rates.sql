@@ -10,8 +10,17 @@
 -- tool; this file documents it, same convention as this repo's other
 -- migrations. The backfill below is a one-time historical load fetched
 -- from https://www.rba.gov.au/statistics/tables/csv/f11.1-data.csv on
--- 2026-09-20 -- refreshing it later is a manual re-fetch + re-run, not
--- a live cron (RBA's CSV endpoint blocks plain automated HTTP clients).
+-- 2026-09-20.
+--
+-- Update (still 2026-09-20): app/api/backtest-update now tops this
+-- table up daily via a Supabase Cron job (update-backtest-daily,
+-- schedule "0 8 * * 1-5"). It turns out a Node fetch() with ordinary
+-- browser headers passes RBA's Akamai bot check even though curl (even
+-- with the same headers) gets HTTP 403 -- verified directly before
+-- wiring the cron up. If RBA tightens detection further, this cron
+-- starts silently no-op'ing rather than corrupting data; check
+-- `select max(rate_date) from backtest_daily_rates` if the backtest
+-- looks stale.
 create table if not exists public.backtest_daily_rates (
   rate_date date primary key,
   aud_usd numeric not null,
