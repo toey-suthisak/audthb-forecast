@@ -2,9 +2,11 @@ import "server-only";
 import { supabaseAdmin } from "@/lib/supabase-server";
 
 // Forward-looking market consensus (forecast vs previous, backfilled with
-// actual once released) for this week's AUD/USD high/medium-impact
-// events, plus a directional lean derived from a hand-curated polarity
-// map (see POLARITY_RULES below).
+// actual once released) for this week's AUD/USD HIGH-impact events, plus
+// a directional lean derived from a hand-curated polarity map (see
+// POLARITY_RULES below). Events with no forecast/previous (e.g. a
+// speech) still show -- they're still worth knowing about -- just
+// without a lean, since there's nothing to compare.
 //
 // ForexFactory's own site shows a "Usual Effect" note per event (e.g.
 // "higher than expected is good for the currency") -- that would be the
@@ -150,10 +152,6 @@ export async function getEconomicConsensus(): Promise<{
     // was narrowed; this excludes them defensively rather than relying
     // on the ingest route alone to have already dropped them.
     .eq("impact", "HIGH")
-    // Only rows that actually have a forecast or previous value to show --
-    // an event with neither (e.g. a speech) has nothing for a reader to
-    // judge direction from.
-    .or("forecast_value.not.is.null,previous_value.not.is.null")
     .order("event_date", { ascending: true });
 
   if (error) {

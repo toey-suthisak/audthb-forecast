@@ -63,6 +63,8 @@ function leanTooltip(event: ConsensusEvent) {
 }
 
 function ConsensusRow({ event }: { event: ConsensusEvent }) {
+  const hasNumbers = event.forecastValue !== null || event.previousValue !== null || event.actualValue !== null;
+
   return (
     <div className="flex items-start justify-between gap-3 py-2 border-b border-stone-200 dark:border-stone-800 last:border-b-0">
       <div className="min-w-0">
@@ -71,26 +73,26 @@ function ConsensusRow({ event }: { event: ConsensusEvent }) {
           {event.eventName}
         </p>
 
-        <p className="text-xs text-stone-600 dark:text-stone-400 mt-0.5">
-          {event.actualValue !== null ? (
-            <>
-              Actual <span className="text-stone-700 dark:text-stone-300">{event.actualValue}</span>
-              {event.forecastValue !== null && <> (forecast {event.forecastValue})</>}
-              {event.previousValue !== null && <>, previous {event.previousValue}</>}
-            </>
-          ) : (
-            <>
-              {event.forecastValue !== null ? (
-                <>
-                  Forecast <span className="text-stone-700 dark:text-stone-300">{event.forecastValue}</span>
-                  {event.previousValue !== null && <>, previous {event.previousValue}</>}
-                </>
-              ) : (
-                <>Previous {event.previousValue}</>
-              )}
-            </>
-          )}
-        </p>
+        {hasNumbers ? (
+          <p className="text-xs text-stone-600 dark:text-stone-400 mt-0.5">
+            {event.actualValue !== null ? (
+              <>
+                Actual <span className="text-stone-700 dark:text-stone-300">{event.actualValue}</span>
+                {event.forecastValue !== null && <> (forecast {event.forecastValue})</>}
+                {event.previousValue !== null && <>, previous {event.previousValue}</>}
+              </>
+            ) : event.forecastValue !== null ? (
+              <>
+                Forecast <span className="text-stone-700 dark:text-stone-300">{event.forecastValue}</span>
+                {event.previousValue !== null && <>, previous {event.previousValue}</>}
+              </>
+            ) : (
+              <>Previous {event.previousValue}</>
+            )}
+          </p>
+        ) : (
+          <p className="text-xs text-stone-500 dark:text-stone-500 mt-0.5 italic">No forecast/previous published</p>
+        )}
       </div>
 
       <div className="shrink-0 text-right">
