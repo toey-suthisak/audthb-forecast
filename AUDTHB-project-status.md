@@ -94,6 +94,16 @@ does not) immediately, rather than waiting a day for the live cron alone to
 accumulate them. Going forward the live hourly cron keeps adding to the same
 `1.0.1` bucket.
 
+DAILY got the same backfill treatment right after, once the user asked why
+DAILY wasn't included too: of the 73 `fx_score_snapshots` rows, 49 already
+had a target_time (run_slot + 24h) in the past, comfortably above the
+20-sample gate on their own. Same method -- same formula and inputs
+available at each historical hour, matched against real `market_prices` --
+seeded DAILY/`1.0.1` straight to 49 resolved samples (41% vs. 43% baseline,
+does not beat it) instead of the ~20-day wait a purely-live cron would have
+needed. All three horizons now show real Track Record numbers the same day
+they were added.
+
 **Backtest (workflow J) is now on a live cron, not just a one-time
 backfill**: `app/api/backtest-update` (CRON_SECRET-gated, same pattern as
 every other ingest route) fetches RBA's F11.1 CSV and upserts rows newer
