@@ -32,20 +32,40 @@ a schedule (`select * from cron.job` for the current list).
 
 **Daily Forecast now shows a number -- deliberately, before it clearly beats a
 baseline**: as of 2026-09-18, `forecast_runs` had 46 matched outcomes for
-`DAILY`/`1.0.0`, clearing Evaluation's `MIN_SAMPLE_SIZE` gate of 20. The
-number itself is still weak (10.9% direction accuracy vs. a 6.5% no-change
-baseline; MAE roughly tied, not clearly better) -- this file previously said
-"do not turn on a live forecast number before that gate clears," but the
-gate is sample size, not accuracy, and the user explicitly asked to reveal it
-anyway after being shown those exact numbers. Hero now shows the live
-UNCALIBRATED prediction (direction/move/range from `buildForecast`) with an
-"Uncalibrated" badge and a caveat line that pulls Track Record's *current*
-numbers live (via `getEvaluationSummary`) rather than a static disclaimer, so
-if/when the model's real accuracy changes, the caveat text updates with it.
-There was a real bug earlier (evaluation read `direction_correct`/
-`within_range` columns that the outcome job intentionally always left null,
-which would have silently shown a permanent 0% accuracy); it's fixed now
-(evaluation computes both fields itself from `actual_move_pct` instead).
+`DAILY`/`1.0.0`, clearing Evaluation's `MIN_SAMPLE_SIZE` gate of 20. This file
+previously said "do not turn on a live forecast number before that gate
+clears," but the gate is sample size, not accuracy, and the user explicitly
+asked to reveal it anyway after being shown the (weak) numbers. Hero now
+shows the live UNCALIBRATED prediction (direction/move/range from
+`buildForecast`) with an "Uncalibrated" badge and a caveat line that pulls
+Track Record's *current* numbers live (via `getEvaluationSummary`) rather
+than a static disclaimer, so if/when the model's real accuracy changes, the
+caveat text updates with it. There was a real bug earlier (evaluation read
+`direction_correct`/`within_range` columns that the outcome job intentionally
+always left null, which would have silently shown a permanent 0% accuracy);
+it's fixed now (evaluation computes both fields itself from
+`actual_move_pct` instead).
+
+**Neutral-band and move-scale constants were recalibrated 2026-09-20, and
+`FORECAST_VERSION` bumped to `1.0.1`**: `NEUTRAL_BAND_PCT` (backtest) and
+`BASELINE_NEUTRAL_BAND_PCT` (evaluation) were both 0.02%, an arbitrary guess
+that sat below even the quietest 10% of days in the 927-day RBA backtest
+(p10 0.047%, median 0.301%) -- "no real move" was effectively never true, and
+the earlier "10.9% vs. 6.5% baseline" numbers mentioned above were an
+artifact of that, not a real measurement. Both are now 0.10% (~p15).
+`REFERENCE_DAILY_RANGE_PCT` (guessed from 7 days of history) moved from
+0.35% to 0.39%, the same backtest's actual mean absolute daily move -- barely
+changed, but now grounded in real data. None of this establishes that Core
+FX Score actually predicts direction; only the *scale* of "no real move" and
+the forecast's move magnitude are now real. The version bump resets Hero's
+Daily Forecast caveat to "insufficient data" until `1.0.1` accumulates its
+own 20+ resolved outcomes (the `1.0.0` bucket stays visible in Track Record,
+re-graded live under the corrected band: now 39% vs. 41% baseline, "Beats
+Baseline: No" -- also more honest than before). One finding this
+recalibration overturned: the backtest's apparent "Mean Reversion beats a
+coin flip across the Friday-to-Monday weekend gap" result (50.3%) drops to
+40.5% under the corrected band -- that edge was itself partly an artifact of
+the same miscalibrated threshold.
 
 **Backtest (workflow J) is now on a live cron, not just a one-time
 backfill**: `app/api/backtest-update` (CRON_SECRET-gated, same pattern as
