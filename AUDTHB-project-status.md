@@ -118,6 +118,28 @@ tighten bot detection further with no warning, and this cron would then
 start silently no-op'ing (it fails safely, never writes bad data) rather
 than erroring loudly.
 
+**Economic Consensus added 2026-09-20** (workflow G extension, forward-looking
+context): the user wanted upcoming news factored into the forecast. Real
+consensus data (forecast/previous/actual) for scheduled releases turned out
+to have no free-and-compliant source -- `event_calendar`'s own migration
+comment already noted every real provider checked (Finnhub, FMP) gates this
+behind a paid plan. ForexFactory's public weekly export
+(`https://nfs.faireconomy.media/ff_calendar_thisweek.xml`) is free and has
+real forecast/previous/actual values, but its own page asks not to be
+fetched more than once an hour ("can result in being blocked") --
+`app/api/economic-consensus` respects that by running once a day
+(`update-economic-consensus-daily`, 00:10 UTC), not hourly. Deliberately
+does **not** compute a directional score from these numbers: an indicator's
+"surprise" polarity (higher-is-bullish vs higher-is-bearish) varies by type
+and this feed has no structured metadata for that -- guessing wrong would
+be actively misleading. Shows the raw forecast/previous/actual under a new
+"Market Consensus" block in `EventCalendar`, scoped to AUD/USD High/Medium
+impact only, explicitly labeled "not scored -- read direction yourself,"
+same spirit as News Sentiment being context-only. Found and fixed a real
+parsing bug during testing: FF mixes CDATA-wrapped tags (date, impact,
+forecast) with plain-text tags (title, country) in the same feed --
+`extractTag` in the route now matches either shape.
+
 ## Current model weights (MODEL_VERSION 1.3.0)
 
 Top-level (sums to 100 when every factor has data):

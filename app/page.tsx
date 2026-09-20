@@ -25,6 +25,10 @@ import {
 } from "@/lib/event-calendar-data";
 
 import {
+  getEconomicConsensus,
+} from "@/lib/economic-consensus-data";
+
+import {
   getRecentNewsSignals,
 } from "@/lib/news-sentiment-data";
 
@@ -112,6 +116,9 @@ export default async function Home() {
 
   const eventCalendar =
     await getEventCalendar();
+
+  const economicConsensus =
+    await getEconomicConsensus();
 
   const alerts =
     await getAlerts(data);
@@ -229,6 +236,7 @@ export default async function Home() {
               today={eventCalendar.today}
               thisWeek={eventCalendar.thisWeek}
               coverageNote={eventCalendar.coverageNote}
+              consensus={economicConsensus.events}
             />
             <NewsSentiment signals={newsSentiment.signals} error={newsSentiment.error} />
           </div>

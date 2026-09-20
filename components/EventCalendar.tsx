@@ -1,6 +1,8 @@
 import type { CalendarEvent } from "@/lib/event-calendar-data";
+import type { ConsensusEvent } from "@/lib/economic-consensus-data";
 import StatusBadge, { type BadgeTone } from "@/components/StatusBadge";
 import StatusLight from "@/components/StatusLight";
+import InfoTip from "@/components/InfoTip";
 
 function importanceColor(importance: string) {
   if (importance === "HIGH") return "text-red-700 dark:text-red-400";
@@ -23,6 +25,50 @@ function formatEventTime(eventTime: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatEventDate(eventDate: string) {
+  return new Date(eventDate).toLocaleDateString("en-US", {
+    timeZone: "UTC",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function ConsensusRow({ event }: { event: ConsensusEvent }) {
+  return (
+    <div className="flex items-start justify-between gap-3 py-2 border-b border-stone-200 dark:border-stone-800 last:border-b-0">
+      <div>
+        <p className="text-sm">
+          <span className={`font-semibold ${importanceColor(event.impact)}`}>{event.currency}</span>{" "}
+          {event.eventName}
+        </p>
+
+        <p className="text-xs text-stone-600 dark:text-stone-400 mt-0.5">
+          {event.actualValue !== null ? (
+            <>
+              Actual <span className="text-stone-700 dark:text-stone-300">{event.actualValue}</span>
+              {event.forecastValue !== null && <> (forecast {event.forecastValue})</>}
+              {event.previousValue !== null && <>, previous {event.previousValue}</>}
+            </>
+          ) : (
+            <>
+              {event.forecastValue !== null ? (
+                <>
+                  Forecast <span className="text-stone-700 dark:text-stone-300">{event.forecastValue}</span>
+                  {event.previousValue !== null && <>, previous {event.previousValue}</>}
+                </>
+              ) : (
+                <>Previous {event.previousValue}</>
+              )}
+            </>
+          )}
+        </p>
+      </div>
+
+      <p className="text-xs text-stone-600 dark:text-stone-400 shrink-0">{formatEventDate(event.eventDate)}</p>
+    </div>
+  );
 }
 
 function EventRow({ event }: { event: CalendarEvent }) {
@@ -53,10 +99,12 @@ export default function EventCalendar({
   today,
   thisWeek,
   coverageNote,
+  consensus,
 }: {
   today: CalendarEvent[];
   thisWeek: CalendarEvent[];
   coverageNote: string;
+  consensus: ConsensusEvent[];
 }) {
   return (
     <div className="p-6">
@@ -94,6 +142,21 @@ export default function EventCalendar({
           </div>
         )}
       </div>
+
+      {consensus.length > 0 && (
+        <div className="mt-4 pt-4 border-t border-stone-200 dark:border-stone-800">
+          <p className="text-sm text-stone-600 dark:text-stone-400 mb-1 inline-flex items-center">
+            Market Consensus
+            <InfoTip text="Forecast/previous values for this week's AUD/USD releases, from ForexFactory's public calendar. Shown as-is, not scored -- an indicator's 'surprise' direction (higher-is-bullish vs higher-is-bearish) varies by type, so read direction yourself rather than treating this as a signal." />
+          </p>
+
+          <div>
+            {consensus.map((event) => (
+              <ConsensusRow key={`${event.eventDate}-${event.currency}-${event.eventName}`} event={event} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
