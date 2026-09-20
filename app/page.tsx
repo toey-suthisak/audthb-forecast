@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import RefreshControls from "@/components/RefreshControls";
 import StickyBar from "@/components/StickyBar";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -319,8 +320,14 @@ export default async function Home() {
           </div>
         </div>
 
-        <p className="text-center text-xs text-stone-600 dark:text-stone-400 mb-6">
+        <p className="text-center text-xs text-stone-600 dark:text-stone-400 mb-2">
           AUD/THB Forecast Dashboard -- for research and monitoring purposes only, not financial advice.
+        </p>
+
+        <p className="text-center text-xs text-stone-600 dark:text-stone-400 mb-6">
+          <Link href="/status" className="hover:underline underline-offset-2">
+            System status
+          </Link>
         </p>
       </div>
     </main>
