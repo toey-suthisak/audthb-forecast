@@ -21,7 +21,7 @@ a schedule (`select * from cron.job` for the current list).
 |---|---|---|
 | A | Ingest (FX, commodities, yields, macro, news) | Live -- see `app/api/*` routes, each with its own cron |
 | B | Score snapshot (`fx_score_snapshots`) | Live |
-| C | Forecast engine (`forecast_runs`) | Live in the backend (hourly, 24h horizon, `lib/forecast-data.ts`) **and surfaced as a number in Hero's Daily Forecast panel as of 2026-09-20** -- see below |
+| C | Forecast engine (`forecast_runs`) | Live in the backend (hourly, issues 1H + 4H + DAILY per run as of 2026-09-20, `lib/forecast-data.ts`) **and surfaced as a number per horizon in Hero's Forecast panel** -- see below |
 | D | Outcome matching (`forecast_outcomes`) | Live -- `update-forecast-outcome-hourly` cron |
 | E | Evaluation (accuracy vs. a naive baseline) | Live -- `lib/evaluation-data.ts` + "Track Record" card on the dashboard |
 | F | Confidence | Live -- `lib/confidence-data.ts`, badge next to Core FX Score in Hero |
@@ -66,6 +66,33 @@ recalibration overturned: the backtest's apparent "Mean Reversion beats a
 coin flip across the Friday-to-Monday weekend gap" result (50.3%) drops to
 40.5% under the corrected band -- that edge was itself partly an artifact of
 the same miscalibrated threshold.
+
+**1H and 4H forecasts added 2026-09-20, alongside DAILY**: the user found
+DAILY's ~20-day wait for Track Record's 20-sample gate too slow to be useful
+by demo time. `lib/forecast-data.ts` generalized `buildForecast(horizon, ...)`
+over `FORECAST_HORIZONS = ["1H", "4H", "DAILY"]`, each with its own
+move-scale constant (`HORIZON_CONFIG`) -- DAILY still 0.39% from the 927-day
+RBA backtest, 1H/4H calibrated instead against this project's own live
+AUD/THB feed (`market_prices`, 2026-09-11..20, ~9 days at 10-min resolution:
+mean |1H move| 0.042%, mean |4H move| 0.071%) since no free historical
+intraday source exists. `forecast_runs`'s natural key was migrated to
+`(run_slot, model_version, forecast_version, horizon)` so one score-snapshot
+run can issue all three without conflicting. `lib/evaluation-data.ts`'s
+neutral band is now per-horizon too (1H 0.01%, 4H 0.02%, DAILY 0.10%) --
+a single 0.10% band would have made every 1H/4H move register as "no real
+move," silently favoring the no-change baseline. Outcome matching
+(`app/api/forecast-outcome`) needed no changes: it already worked generically
+off `target_time`, regardless of horizon. Because 1H/4H resolve in 1-4 hours
+instead of 24, they clear the 20-sample gate in about a day instead of ~20 --
+**backfilled once, retroactively, from the 73 hourly `fx_score_snapshots`
+rows already on hand (2026-09-17..20)**: same formula, same historical
+`core_fx_score`/`rate` at each past hour, matched against real `market_prices`
+at run_slot+1h/+4h -- no lookahead, since the formula only ever used
+information available at that past hour. This seeded 73 resolved samples
+each for 1H (33% vs. 30% baseline, beats baseline) and 4H (26% vs. 26%,
+does not) immediately, rather than waiting a day for the live cron alone to
+accumulate them. Going forward the live hourly cron keeps adding to the same
+`1.0.1` bucket.
 
 **Backtest (workflow J) is now on a live cron, not just a one-time
 backfill**: `app/api/backtest-update` (CRON_SECRET-gated, same pattern as

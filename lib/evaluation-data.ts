@@ -27,15 +27,29 @@ const MIN_SAMPLE_SIZE = 20;
 // A move smaller than this is treated as "no real move" when deriving
 // the baseline's own direction call from actual_move_pct -- the
 // baseline has no score-based NEUTRAL threshold like the model does,
-// so this stands in for one.
+// so this stands in for one. Per-horizon because 1H/4H moves are much
+// smaller than DAILY moves -- a single band would make short horizons
+// call almost everything "no real move" (baseline artificially strong)
+// or the opposite, depending which horizon it was actually sized for.
 //
-// Was 0.02%, an arbitrary guess -- recalibrated 2026-09-20 to 0.10% to
-// match lib/backtest-data.ts's NEUTRAL_BAND_PCT, both derived from the
-// real distribution of |daily move| across the 927-day RBA backtest
-// (mean 0.394%, median 0.301%, p10 0.047%, p20 0.123% -- 0.02% sat below
-// even the quietest 10% of days). Kept in sync with that constant on
-// purpose so "no real move" means the same thing everywhere in the app.
-const BASELINE_NEUTRAL_BAND_PCT = 0.1;
+// DAILY: 0.10%, matching lib/backtest-data.ts's NEUTRAL_BAND_PCT, both
+// derived from the real distribution of |daily move| across the
+// 927-day RBA backtest (mean 0.394%, median 0.301%, p10 0.047%, p20
+// 0.123%). 1H / 4H added 2026-09-20 against this project's own live
+// AUD/THB feed (market_prices, 2026-09-11..20, ~9 days at 10-min
+// resolution): mean |1H move| 0.042% (p10 0.004%, p20 0.009%), mean
+// |4H move| 0.071% (p10 0.008%, p20 0.018%) -- bands set near each
+// horizon's own p20, same logic as DAILY's, on much thinner evidence.
+const BASELINE_NEUTRAL_BAND_PCT_BY_HORIZON: Record<string, number> = {
+  "1H": 0.01,
+  "4H": 0.02,
+  DAILY: 0.1,
+};
+const DEFAULT_BASELINE_NEUTRAL_BAND_PCT = 0.1;
+
+function neutralBandFor(horizon: string): number {
+  return BASELINE_NEUTRAL_BAND_PCT_BY_HORIZON[horizon] ?? DEFAULT_BASELINE_NEUTRAL_BAND_PCT;
+}
 
 type MatchedOutcomeRow = {
   horizon: string;
@@ -87,19 +101,20 @@ function average(values: number[]): number | null {
 // Same dead-zone the baseline uses to call its own "no real move" --
 // a real move must clear this band before it counts as a direction,
 // otherwise noise-sized moves would flip direction_correct at random.
-function actualDirection(actualMovePct: number): "BULLISH" | "BEARISH" | "NEUTRAL" {
-  if (actualMovePct > BASELINE_NEUTRAL_BAND_PCT) return "BULLISH";
-  if (actualMovePct < -BASELINE_NEUTRAL_BAND_PCT) return "BEARISH";
+function actualDirection(actualMovePct: number, neutralBandPct: number): "BULLISH" | "BEARISH" | "NEUTRAL" {
+  if (actualMovePct > neutralBandPct) return "BULLISH";
+  if (actualMovePct < -neutralBandPct) return "BEARISH";
   return "NEUTRAL";
 }
 
 function evaluateGroup(rows: MatchedOutcomeRow[]): HorizonEvaluation {
   const first = rows[0];
+  const neutralBand = neutralBandFor(first.horizon);
   const sampleSize = rows.length;
   const insufficientData = sampleSize < MIN_SAMPLE_SIZE;
 
   const directionCorrectFlags = rows.map((r) =>
-    actualDirection(toNumber(r.actual_move_pct)) === r.predicted_direction ? 1 : 0,
+    actualDirection(toNumber(r.actual_move_pct), neutralBand) === r.predicted_direction ? 1 : 0,
   );
   const absErrors = rows.map((r) => toNumber(r.absolute_error_pct));
   const withinRangeFlags = rows.map((r) => {
@@ -111,7 +126,7 @@ function evaluateGroup(rows: MatchedOutcomeRow[]): HorizonEvaluation {
 
   const baselineCorrectFlags = rows.map((r) => {
     const actualMove = toNumber(r.actual_move_pct);
-    return Math.abs(actualMove) <= BASELINE_NEUTRAL_BAND_PCT ? 1 : 0;
+    return Math.abs(actualMove) <= neutralBand ? 1 : 0;
   });
   const baselineAbsErrors = rows.map((r) => Math.abs(toNumber(r.actual_move_pct)));
 
@@ -225,8 +240,8 @@ export async function getEvaluationSummary(): Promise<{
     groups,
     totalMatchedOutcomes: rows.length,
     methodology:
-      `Baseline is "always predict no move": correct when |actual move| <= ${BASELINE_NEUTRAL_BAND_PCT}%, ` +
-      `MAE = average(|actual move|). Model stats come straight from forecast_outcomes ` +
+      `Baseline is "always predict no move": correct when |actual move| is within that horizon's neutral band ` +
+      `(1H 0.01%, 4H 0.02%, DAILY 0.10%), MAE = average(|actual move|). Model stats come straight from forecast_outcomes ` +
       `(direction_correct / absolute_error_pct / within_range), computed by the outcome-matching job. ` +
       `Momentum baseline not implemented yet -- needs a price-history join this table doesn't have. ` +
       `Groups below ${MIN_SAMPLE_SIZE} matched outcomes report insufficientData instead of a number.`,

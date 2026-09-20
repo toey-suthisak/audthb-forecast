@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { getDashboardData, MODEL_VERSION } from "@/lib/dashboard-data";
-import { buildForecast, FORECAST_VERSION, HORIZON_HOURS } from "@/lib/forecast-data";
+import { buildForecast, FORECAST_HORIZONS, FORECAST_VERSION, HORIZON_CONFIG } from "@/lib/forecast-data";
 
 // =========================================================
 // RUN SLOT
@@ -155,60 +155,75 @@ export async function GET(request: Request) {
 
     // Forecast is derived from this same run -- same run_slot, same
     // reference rate and score. No score means nothing to forecast.
-    let forecastResult: {
+    // One forecast_runs row is issued per horizon (1H, 4H, DAILY) each
+    // time this cron fires, so short horizons accumulate a resolvable
+    // Track Record sample much faster than DAILY ever could: a 1H
+    // forecast resolves within the hour, so ~20 resolved samples (the
+    // Evaluation minimum) land in under a day instead of DAILY's ~20.
+    type ForecastEntry = {
+      horizon: string;
       forecast: ReturnType<typeof buildForecast> | null;
       database: { status: string; attempts: number; error: string | null };
-    } = {
+    };
+
+    let forecastResults: ForecastEntry[] = FORECAST_HORIZONS.map((horizon) => ({
+      horizon,
       forecast: null,
       database: { status: "SKIPPED", attempts: 0, error: null },
-    };
+    }));
 
     if (dashboard.coreFxScore !== null) {
       const referenceRate = dashboard.latestPrice
         ? Number(dashboard.latestPrice.rate)
         : null;
 
-      const forecast = buildForecast(dashboard.coreFxScore, referenceRate);
+      forecastResults = [];
 
-      const targetTime = new Date(
-        new Date(runSlot).getTime() + HORIZON_HOURS * 60 * 60 * 1000,
-      ).toISOString();
+      for (const horizon of FORECAST_HORIZONS) {
+        const { hours } = HORIZON_CONFIG[horizon];
+        const forecast = buildForecast(horizon, dashboard.coreFxScore, referenceRate);
 
-      const forecastRow = {
-        run_slot: runSlot,
-        model_version: MODEL_VERSION,
-        forecast_version: FORECAST_VERSION,
+        const targetTime = new Date(
+          new Date(runSlot).getTime() + hours * 60 * 60 * 1000,
+        ).toISOString();
 
-        horizon: "DAILY",
-        horizon_hours: HORIZON_HOURS,
-        target_time: targetTime,
+        const forecastRow = {
+          run_slot: runSlot,
+          model_version: MODEL_VERSION,
+          forecast_version: FORECAST_VERSION,
 
-        reference_rate: referenceRate,
-        core_fx_score: dashboard.coreFxScore,
+          horizon,
+          horizon_hours: hours,
+          target_time: targetTime,
 
-        predicted_direction: forecast.predictedDirection,
-        predicted_move_pct: forecast.predictedMovePct,
-        predicted_range_low_pct: forecast.predictedRangeLowPct,
-        predicted_range_high_pct: forecast.predictedRangeHighPct,
+          reference_rate: referenceRate,
+          core_fx_score: dashboard.coreFxScore,
 
-        status: "UNCALIBRATED",
-        methodology: forecast.methodology,
-      };
+          predicted_direction: forecast.predictedDirection,
+          predicted_move_pct: forecast.predictedMovePct,
+          predicted_range_low_pct: forecast.predictedRangeLowPct,
+          predicted_range_high_pct: forecast.predictedRangeHighPct,
 
-      const forecastDatabase = await upsertImmutable(
-        "forecast_runs",
-        forecastRow,
-        "run_slot,model_version,forecast_version",
-      );
+          status: "UNCALIBRATED",
+          methodology: forecast.methodology,
+        };
 
-      forecastResult = {
-        forecast,
-        database: {
-          status: forecastDatabase.success ? "OK" : "FAILED",
-          attempts: forecastDatabase.attempts,
-          error: forecastDatabase.error,
-        },
-      };
+        const forecastDatabase = await upsertImmutable(
+          "forecast_runs",
+          forecastRow,
+          "run_slot,model_version,forecast_version,horizon",
+        );
+
+        forecastResults.push({
+          horizon,
+          forecast,
+          database: {
+            status: forecastDatabase.success ? "OK" : "FAILED",
+            attempts: forecastDatabase.attempts,
+            error: forecastDatabase.error,
+          },
+        });
+      }
     }
 
     return NextResponse.json({
@@ -222,7 +237,7 @@ export async function GET(request: Request) {
         attempts: database.attempts,
         error: database.error,
       },
-      forecast: forecastResult,
+      forecasts: forecastResults,
     });
   } catch (error) {
     console.error("Score snapshot error:", error);

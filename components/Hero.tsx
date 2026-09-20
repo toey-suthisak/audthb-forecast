@@ -1,7 +1,7 @@
 import type { DashboardData } from "@/lib/dashboard-data";
 import { getEventRisk } from "@/lib/event-calendar-data";
 import { getConfidence, type ConfidenceLevel } from "@/lib/confidence-data";
-import { buildForecast, FORECAST_VERSION, type ForecastDirection } from "@/lib/forecast-data";
+import { buildForecast, FORECAST_HORIZONS, FORECAST_VERSION, type ForecastDirection } from "@/lib/forecast-data";
 import { getEvaluationSummary } from "@/lib/evaluation-data";
 import StatusBadge, { type BadgeTone } from "@/components/StatusBadge";
 import ScoreGauge from "@/components/ScoreGauge";
@@ -66,16 +66,23 @@ export default async function Hero({ data }: { data: DashboardData }) {
   const confidence = await getConfidence(data);
 
   const referenceRate = data.latestPrice ? Number(data.latestPrice.rate) : null;
-  const forecast = data.coreFxScore !== null ? buildForecast(data.coreFxScore, referenceRate) : null;
 
-  // Track Record's own numbers for this exact horizon/version, reused
-  // here so the caveat next to the prediction states the model's actual
-  // measured performance instead of a static "not tested yet" -- the
-  // same honesty rule the backtest page follows for its badges.
+  // Track Record's own numbers for each horizon/version, reused here so
+  // the line under each prediction states the model's actual measured
+  // performance instead of a static "not tested yet" -- the same
+  // honesty rule the backtest page follows for its badges.
   const evaluation = await getEvaluationSummary();
-  const dailyTrackRecord = evaluation.groups.find(
-    (g) => g.horizon === "DAILY" && g.forecastVersion === FORECAST_VERSION,
-  );
+
+  const forecasts =
+    data.coreFxScore !== null
+      ? FORECAST_HORIZONS.map((horizon) => ({
+          horizon,
+          forecast: buildForecast(horizon, data.coreFxScore!, referenceRate),
+          trackRecord: evaluation.groups.find(
+            (g) => g.horizon === horizon && g.forecastVersion === FORECAST_VERSION,
+          ),
+        }))
+      : [];
 
   return (
     <div className="p-6 sm:p-8">
@@ -163,41 +170,45 @@ export default async function Hero({ data }: { data: DashboardData }) {
 
           <div className="mt-5 pt-4 border-t border-stone-200 dark:border-stone-800">
             <p className="text-xs font-medium text-stone-600 dark:text-stone-400 uppercase tracking-widest inline-flex items-center">
-              Daily Forecast (24H)
-              <InfoTip text="Derived from today's Core FX Score using a fixed, uncalibrated formula -- it is not a statistically fitted prediction. Track Record below is the only honest measure of how well it actually performs." />
+              Forecast
+              <InfoTip text="Derived from today's Core FX Score using a fixed, uncalibrated formula per horizon -- it is not a statistically fitted prediction. Track Record below is the only honest measure of how well each one actually performs." />
             </p>
 
-            {forecast ? (
-              <>
-                <div className="flex items-baseline gap-2 mt-2">
-                  <p className={`text-2xl font-semibold ${forecastDirectionColor(forecast.predictedDirection)}`}>
-                    {forecast.predictedDirection}
-                  </p>
-                  <StatusBadge label="Uncalibrated" tone="amber" />
-                </div>
-                <p className="text-sm text-stone-600 dark:text-stone-400 mt-1">
-                  Predicted move {forecast.predictedMovePct >= 0 ? "+" : ""}
-                  {forecast.predictedMovePct.toFixed(2)}% -- range {forecast.predictedRangeLowPct.toFixed(2)}% to{" "}
-                  {forecast.predictedRangeHighPct.toFixed(2)}%
-                </p>
+            {forecasts.length > 0 ? (
+              <div className="mt-2 divide-y divide-stone-200 dark:divide-stone-800">
+                {forecasts.map(({ horizon, forecast, trackRecord }) => (
+                  <div key={horizon} className="py-2.5 first:pt-0 last:pb-0">
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <span className="text-xs font-semibold text-stone-500 dark:text-stone-500 shrink-0">
+                        {horizon}
+                      </span>
+                      <p className={`text-lg font-semibold ${forecastDirectionColor(forecast.predictedDirection)}`}>
+                        {forecast.predictedDirection}
+                      </p>
+                      <StatusBadge label="Uncalibrated" tone="amber" />
+                      <span className="text-xs text-stone-600 dark:text-stone-400 ml-auto">
+                        {forecast.predictedMovePct >= 0 ? "+" : ""}
+                        {forecast.predictedMovePct.toFixed(2)}% ({forecast.predictedRangeLowPct.toFixed(2)}% to{" "}
+                        {forecast.predictedRangeHighPct.toFixed(2)}%)
+                      </span>
+                    </div>
 
-                <p className="text-xs text-stone-600 dark:text-stone-400 mt-2 leading-relaxed">
-                  {dailyTrackRecord && !dailyTrackRecord.insufficientData ? (
-                    <>
-                      Not yet proven more accurate than a guess: over the last {dailyTrackRecord.sampleSize} forecasts,
-                      direction was correct{" "}
-                      {(dailyTrackRecord.model.directionalAccuracy! * 100).toFixed(1)}% of the time (baseline guessing
-                      "no change" was correct{" "}
-                      {(dailyTrackRecord.baselineNoChange.directionalAccuracy! * 100).toFixed(1)}% of the time), and
-                      average error is{" "}
-                      {dailyTrackRecord.beatsBaseline.onMae ? "better than" : "worse than or about the same as"} the
-                      baseline -- see full numbers in Track Record below.
-                    </>
-                  ) : (
-                    "Not enough data yet to confirm accuracy (needs at least 20 resolved forecasts). Check Track Record below once there's enough data."
-                  )}
-                </p>
-              </>
+                    <p className="text-xs text-stone-600 dark:text-stone-400 mt-1">
+                      {trackRecord && !trackRecord.insufficientData ? (
+                        <>
+                          Direction correct {(trackRecord.model.directionalAccuracy! * 100).toFixed(1)}% of last{" "}
+                          {trackRecord.sampleSize} (baseline{" "}
+                          {(trackRecord.baselineNoChange.directionalAccuracy! * 100).toFixed(1)}%)
+                        </>
+                      ) : (
+                        `Not enough resolved forecasts yet to show accuracy${
+                          trackRecord ? ` (${trackRecord.sampleSize}/${trackRecord.minSampleSize})` : ""
+                        }.`
+                      )}
+                    </p>
+                  </div>
+                ))}
+              </div>
             ) : (
               <p className="text-sm text-stone-600 dark:text-stone-400 mt-1">
                 Core FX Score is not available right now -- unable to calculate a forecast.
