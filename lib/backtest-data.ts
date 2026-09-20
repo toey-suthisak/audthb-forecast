@@ -40,6 +40,17 @@ export type BacktestYearResult = {
   beatsCoinFlip: boolean;
 };
 
+export type BacktestSegmentResult = {
+  label: string;
+  sampleSize: number;
+  directionalAccuracy: number;
+  mae: number;
+  beatsCoinFlip: boolean;
+};
+
+const WEEKEND_GAP_LABEL = "Fri → Mon (weekend gap)";
+const REGULAR_GAP_LABEL = "Regular weekday → weekday";
+
 export type BacktestStrategyResult = {
   name: string;
   description: string;
@@ -57,6 +68,14 @@ export type BacktestStrategyResult = {
   // hide a strategy that only worked in one unusual year. Ordered
   // earliest to latest, one row per year present in the sample.
   byYear: BacktestYearResult[];
+  // Same two numbers again, split by whether the transition spans a
+  // weekend (Friday's close to Monday's close, which bundles three
+  // calendar days of price action into one step RBA's business-day-only
+  // series treats as adjacent) versus a regular weekday-to-weekday step.
+  // Answers a different question than the live Track Record's own
+  // weekend pattern: that one is an artifact of hourly snapshots taken
+  // while the market sits closed, not a real close-to-close comparison.
+  byWeekendGap: BacktestSegmentResult[];
 };
 
 export type BacktestSummary = {
@@ -102,6 +121,28 @@ function breakdownByYear(years: string[], correct: number[], absErrors: number[]
   });
 }
 
+// Same grouping logic as breakdownByYear, generalized to any label set --
+// used for the weekend-gap split (two labels instead of one per year).
+function breakdownBySegments(labels: string[], correct: number[], absErrors: number[]): BacktestSegmentResult[] {
+  const uniqueLabels = Array.from(new Set(labels)).sort();
+
+  return uniqueLabels.map((label) => {
+    const indices = labels.reduce<number[]>((acc, l, i) => {
+      if (l === label) acc.push(i);
+      return acc;
+    }, []);
+    const accuracy = average(indices.map((i) => correct[i]));
+
+    return {
+      label,
+      sampleSize: indices.length,
+      directionalAccuracy: accuracy,
+      mae: average(indices.map((i) => absErrors[i])),
+      beatsCoinFlip: accuracy > 0.5,
+    };
+  });
+}
+
 export async function getBacktestSummary(): Promise<BacktestSummary> {
   const { data, error } = await supabaseAdmin
     .from("backtest_daily_rates")
@@ -136,6 +177,10 @@ export async function getBacktestSummary(): Promise<BacktestSummary> {
   // loop below -- not the resolution date -- since that's the year a
   // strategy using this row would show up in.
   const years: string[] = [];
+  // Whether "today" is a Friday -- RBA's series only has business days,
+  // so the very next row after a Friday is the following Monday, and
+  // this step's actual/predicted moves span the whole weekend.
+  const weekendGapLabels: string[] = [];
 
   for (let i = MOMENTUM_WINDOW_DAYS; i < rates.length - 1; i++) {
     const today = rates[i];
@@ -145,6 +190,8 @@ export async function getBacktestSummary(): Promise<BacktestSummary> {
     actualMoves.push(((tomorrow - today) / today) * 100);
     momentumMoves.push(((today - past) / past) * 100);
     years.push(rows[i].rate_date.slice(0, 4));
+    const isFriday = new Date(rows[i].rate_date).getUTCDay() === 5;
+    weekendGapLabels.push(isFriday ? WEEKEND_GAP_LABEL : REGULAR_GAP_LABEL);
   }
 
   const actualDirections = actualMoves.map(direction);
@@ -188,6 +235,7 @@ export async function getBacktestSummary(): Promise<BacktestSummary> {
         beatsBaselineOnMae: momentumMae < baselineMae,
         beatsCoinFlip: momentumAccuracy > 0.5,
         byYear: breakdownByYear(years, momentumCorrect, momentumAbsErrors),
+        byWeekendGap: breakdownBySegments(weekendGapLabels, momentumCorrect, momentumAbsErrors),
       },
       {
         name: `${MOMENTUM_WINDOW_DAYS}-Day Mean Reversion`,
@@ -198,6 +246,7 @@ export async function getBacktestSummary(): Promise<BacktestSummary> {
         beatsBaselineOnMae: reversionMae < baselineMae,
         beatsCoinFlip: reversionAccuracy > 0.5,
         byYear: breakdownByYear(years, reversionCorrect, reversionAbsErrors),
+        byWeekendGap: breakdownBySegments(weekendGapLabels, reversionCorrect, reversionAbsErrors),
       },
     ],
     error: null,
