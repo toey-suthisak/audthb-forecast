@@ -37,9 +37,28 @@ const STR = {
   },
 } as const;
 
-const CHART_WIDTH = 640;
-const CHART_HEIGHT = 260;
-const PAD_LEFT = 78;
+const CHART_WIDTH = 720;
+const CHART_HEIGHT = 340;
+const PAD_LEFT = 80;
+
+// Simple quadratic-bezier-through-midpoints smoothing -- each raw point
+// stays a control point, the curve passes through the midpoint between
+// consecutive points, giving a smooth line without ever overshooting
+// past the real data (unlike a cardinal/Catmull-Rom spline, which can).
+function smoothPath(points: { x: number; y: number }[]): string {
+  if (points.length < 2) return "";
+  let d = `M${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i];
+    const p1 = points[i + 1];
+    const midX = (p0.x + p1.x) / 2;
+    const midY = (p0.y + p1.y) / 2;
+    d += ` Q${p0.x.toFixed(1)},${p0.y.toFixed(1)} ${midX.toFixed(1)},${midY.toFixed(1)}`;
+  }
+  const last = points[points.length - 1];
+  d += ` T${last.x.toFixed(1)},${last.y.toFixed(1)}`;
+  return d;
+}
 
 export default function RangeChart({
   series,
@@ -75,7 +94,7 @@ export default function RangeChart({
 
   const rawMin = Math.min(...allValues);
   const rawMax = Math.max(...allValues);
-  const padding = (rawMax - rawMin) * 0.08 || 0.01;
+  const padding = (rawMax - rawMin) * 0.1 || 0.01;
   const min = rawMin - padding;
   const max = rawMax + padding;
   const span = max - min || 1;
@@ -84,14 +103,12 @@ export default function RangeChart({
   const stepX = sliced.length > 1 ? plotWidth / (sliced.length - 1) : 0;
   const yFor = (v: number) => CHART_HEIGHT - ((v - min) / span) * CHART_HEIGHT;
 
-  const path = closes
-    .map((v, i) => `${i === 0 ? "M" : "L"}${(PAD_LEFT + i * stepX).toFixed(1)},${yFor(v).toFixed(1)}`)
-    .join(" ");
+  const points = closes.map((v, i) => ({ x: PAD_LEFT + i * stepX, y: yFor(v) }));
+  const path = smoothPath(points);
 
-  const areaPath = `${path} L${(PAD_LEFT + (sliced.length - 1) * stepX).toFixed(1)},${CHART_HEIGHT} L${PAD_LEFT},${CHART_HEIGHT} Z`;
+  const areaPath = `${path} L${points[points.length - 1].x.toFixed(1)},${CHART_HEIGHT} L${PAD_LEFT},${CHART_HEIGHT} Z`;
 
-  const lastY = yFor(closes[closes.length - 1]);
-  const lastX = PAD_LEFT + (sliced.length - 1) * stepX;
+  const lastPoint = points[points.length - 1];
 
   const referenceLines: { value: number; label: string; emphasis?: boolean }[] = pivots
     ? [
@@ -105,14 +122,20 @@ export default function RangeChart({
       ]
     : [];
 
+  // Faint horizontal gridlines for scale reference, independent of the
+  // pivot levels above -- purely visual, evenly spaced across the
+  // plotted min/max.
+  const gridlineCount = 4;
+  const gridlines = Array.from({ length: gridlineCount + 1 }, (_, i) => CHART_HEIGHT * (i / gridlineCount));
+
   return (
     <div>
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
         <div className="flex flex-wrap items-start gap-8">
           {currentRate !== null && (
             <div>
               <p className="text-xs text-v2-muted">{t.currentPrice}</p>
-              <p className="font-mono text-2xl font-semibold text-v2-foreground">{currentRate.toFixed(4)}</p>
+              <p className="font-mono text-3xl font-semibold text-v2-foreground">{currentRate.toFixed(4)}</p>
             </div>
           )}
           {change1H !== null && (
@@ -140,9 +163,9 @@ export default function RangeChart({
               key={days}
               type="button"
               onClick={() => setRange(days)}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                 range === days
-                  ? "bg-blue-600 text-white"
+                  ? "bg-blue-600 text-white shadow-sm"
                   : "text-v2-muted hover:bg-slate-100 dark:hover:bg-slate-800"
               }`}
             >
@@ -152,13 +175,17 @@ export default function RangeChart({
         </div>
       </div>
 
-      <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} preserveAspectRatio="none" className="w-full h-[260px]">
+      <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} preserveAspectRatio="none" className="w-full h-[340px]">
         <defs>
           <linearGradient id="v2-range-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="currentColor" stopOpacity="0.18" className="text-blue-500" />
+            <stop offset="0%" stopColor="currentColor" stopOpacity="0.28" className="text-blue-500" />
             <stop offset="100%" stopColor="currentColor" stopOpacity="0" className="text-blue-500" />
           </linearGradient>
         </defs>
+
+        {gridlines.map((y) => (
+          <line key={y} x1={PAD_LEFT} x2={CHART_WIDTH} y1={y} y2={y} strokeWidth={1} className="stroke-slate-100 dark:stroke-slate-800/60" />
+        ))}
 
         {referenceLines.map((line) => {
           const y = yFor(line.value);
@@ -181,8 +208,15 @@ export default function RangeChart({
         })}
 
         <path d={areaPath} fill="url(#v2-range-fill)" stroke="none" />
-        <path d={path} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="text-blue-600 dark:text-blue-400" />
-        <circle cx={lastX} cy={lastY} r={3.5} fill="currentColor" className="text-blue-600 dark:text-blue-400" />
+        <path d={path} fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="text-blue-600 dark:text-blue-400" />
+        <circle
+          cx={lastPoint.x}
+          cy={lastPoint.y}
+          r={5}
+          strokeWidth={2.5}
+          stroke="currentColor"
+          className="fill-white dark:fill-slate-900 text-blue-600 dark:text-blue-400"
+        />
       </svg>
 
       <div className="flex flex-wrap items-center justify-between gap-2 mt-2">

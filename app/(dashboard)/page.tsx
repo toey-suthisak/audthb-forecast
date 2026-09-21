@@ -1,6 +1,7 @@
 import Card from "@/components/v2/Card";
 import BadgeChip from "@/components/v2/BadgeChip";
 import RangeChart from "@/components/v2/RangeChart";
+import Sparkline from "@/components/v2/Sparkline";
 import WatchlistRow from "@/components/v2/WatchlistRow";
 import CautionToast from "@/components/v2/CautionToast";
 import { getLocale } from "@/lib/i18n-server";
@@ -27,6 +28,8 @@ const STR = {
     confidence: "Confidence",
     priceTechnical: "Price & Technical",
     forecast: "Forecast",
+    actual: "Actual",
+    predicted: "Predicted",
     upcoming: "Upcoming Events",
     noUpcoming: "No upcoming MEDIUM/HIGH-impact AUD/USD/THB events this week.",
     relatedMarkets: "Related Markets",
@@ -42,6 +45,8 @@ const STR = {
     confidence: "ความมั่นใจ",
     priceTechnical: "ราคา & เทคนิค",
     forecast: "พยากรณ์",
+    actual: "เกิดขึ้นจริง",
+    predicted: "คาดการณ์",
     upcoming: "ข่าวที่จะประกาศเร็วๆ นี้",
     noUpcoming: "สัปดาห์นี้ไม่มีข่าวผลกระทบปานกลาง/สูงของ AUD/USD/THB",
     relatedMarkets: "ตลาดที่เกี่ยวข้อง",
@@ -62,6 +67,21 @@ function biasTextClass(direction: string): string {
   const tone = biasTone(direction);
   if (tone === "emerald") return "text-emerald-600 dark:text-emerald-400";
   if (tone === "red") return "text-red-600 dark:text-red-400";
+  return "text-v2-muted";
+}
+
+// Small visual up/down/flat cue next to each forecast horizon's
+// direction text -- same BULLISH/BEARISH/NEUTRAL value already shown as
+// a word, just also as an arrow for a faster scan.
+function DirectionArrow({ direction }: { direction: string }) {
+  const symbol = direction === "BULLISH" ? "↑" : direction === "BEARISH" ? "↓" : "→";
+  return <span className={`text-lg leading-none ${biasTextClass(direction)}`}>{symbol}</span>;
+}
+
+function changeColorClass(pct: number | null): string {
+  if (pct === null) return "text-v2-muted";
+  if (pct > 0) return "text-emerald-600 dark:text-emerald-400";
+  if (pct < 0) return "text-red-600 dark:text-red-400";
   return "text-v2-muted";
 }
 
@@ -100,12 +120,29 @@ export default async function DashboardPage() {
   const upcomingGroups = Array.from(upcomingByDate.entries()).sort(([a], [b]) => a.localeCompare(b));
 
   const rangeSeries = technicalOutlook.priceSeries.map((p) => ({ date: p.date, close: p.close }));
+  const sparklineSeries = technicalOutlook.priceSeries.slice(-14).map((p) => p.close);
+
+  // Real daily change (today's latest close vs. the last *completed*
+  // day's close) -- same completed-bar the pivot itself is based on,
+  // computed here rather than stored anywhere since it's a one-line
+  // derivation of data already fetched for the chart.
+  const bars = technicalOutlook.priceSeries;
+  const dailyChangePct =
+    bars.length >= 2 && bars[bars.length - 2].close !== 0
+      ? ((bars[bars.length - 1].close - bars[bars.length - 2].close) / bars[bars.length - 2].close) * 100
+      : null;
+
+  const actualChangeByHorizon: Record<string, number | null> = {
+    "1H": data.change1H,
+    "4H": data.change4H,
+    DAILY: dailyChangePct,
+  };
 
   return (
     <div className="space-y-6">
       <CautionToast alerts={alerts} locale={locale} />
 
-      <div className="grid lg:grid-cols-2 gap-6">
+      <div className="grid lg:grid-cols-3 gap-6">
         <Card>
           <div className="flex items-center justify-between">
             <p className="text-xs font-medium text-v2-muted uppercase tracking-wide">{t.rate}</p>
@@ -115,12 +152,19 @@ export default async function DashboardPage() {
             {data.latestPrice ? Number(data.latestPrice.rate).toFixed(4) : "--"}
           </p>
           {data.change1H !== null && (
-            <p className={`text-sm mt-1 ${data.change1H >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+            <p className={`text-sm mt-1 ${changeColorClass(data.change1H)}`}>
               {data.change1H >= 0 ? "+" : ""}
               {data.change1H.toFixed(2)}% (1H)
             </p>
           )}
-          <div className="grid grid-cols-3 gap-2 mt-4 text-xs text-v2-muted">
+
+          {sparklineSeries.length >= 2 && (
+            <div className="mt-3">
+              <Sparkline points={sparklineSeries} width={280} height={48} positive={data.change1H === null ? null : data.change1H >= 0} />
+            </div>
+          )}
+
+          <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-v2-border text-xs text-v2-muted">
             <div>
               <p>{t.high}</p>
               <p className="font-mono text-v2-foreground">{data.intradayHigh?.toFixed(4) ?? "--"}</p>
@@ -173,43 +217,12 @@ export default async function DashboardPage() {
             <p className="text-xs text-v2-muted mt-1 leading-relaxed">{technicalOutlook.actionBias.note}</p>
           </div>
         </Card>
-      </div>
-
-      <Card title={t.priceTechnical}>
-        <RangeChart
-          series={rangeSeries}
-          locale={locale}
-          pivots={technicalOutlook.pivots}
-          currentRate={technicalOutlook.currentRate}
-          change1H={data.change1H}
-          swingLow={technicalOutlook.swingLow}
-          swingHigh={technicalOutlook.swingHigh}
-          swingDays={technicalOutlook.swingLookbackDays}
-        />
-      </Card>
-
-      <div className="grid lg:grid-cols-3 gap-6">
-        <Card title={t.forecast} className="lg:col-span-2">
-          <div className="grid sm:grid-cols-3 gap-4">
-            {technicalOutlook.forecasts.map((f) => (
-              <div key={f.horizon} className="rounded-lg border border-v2-border p-3">
-                <p className="text-xs font-semibold text-v2-muted">{f.horizon}</p>
-                <p className={`text-sm font-semibold mt-1 ${biasTextClass(f.direction)}`}>{tLabel(f.direction, locale)}</p>
-                {f.priceRange && (
-                  <p className="font-mono text-xs text-v2-muted mt-1">
-                    {f.priceRange.low.toFixed(4)}-{f.priceRange.high.toFixed(4)}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </Card>
 
         <Card title={t.upcoming} padded={false}>
           {upcomingGroups.length === 0 ? (
             <p className="text-sm text-v2-muted p-5">{t.noUpcoming}</p>
           ) : (
-            <div className="max-h-[360px] overflow-y-auto">
+            <div className="max-h-[340px] overflow-y-auto">
               {upcomingGroups.map(([date, events]) => (
                 <div key={date} className="px-5 py-3 border-b border-v2-border last:border-b-0">
                   <p className="text-[11px] font-semibold text-v2-muted uppercase tracking-wide mb-2">
@@ -238,6 +251,50 @@ export default async function DashboardPage() {
           )}
         </Card>
       </div>
+
+      <Card title={t.priceTechnical}>
+        <RangeChart
+          series={rangeSeries}
+          locale={locale}
+          pivots={technicalOutlook.pivots}
+          currentRate={technicalOutlook.currentRate}
+        />
+      </Card>
+
+      <Card title={t.forecast}>
+        <div className="grid sm:grid-cols-3 gap-4">
+          {technicalOutlook.forecasts.map((f) => {
+            const actual = actualChangeByHorizon[f.horizon];
+            return (
+              <div key={f.horizon} className="rounded-lg border border-v2-border p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-v2-muted">{f.horizon}</p>
+                  <DirectionArrow direction={f.direction} />
+                </div>
+
+                <p className={`text-base font-semibold mt-1 ${biasTextClass(f.direction)}`}>{tLabel(f.direction, locale)}</p>
+
+                <div className="mt-3 pt-3 border-t border-v2-border space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-v2-muted">{t.actual}</span>
+                    <span className={`font-mono font-medium ${changeColorClass(actual)}`}>
+                      {actual !== null ? `${actual >= 0 ? "+" : ""}${actual.toFixed(2)}%` : "--"}
+                    </span>
+                  </div>
+                  {f.priceRange && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-v2-muted">{t.predicted}</span>
+                      <span className="font-mono text-v2-foreground">
+                        {f.priceRange.low.toFixed(4)}-{f.priceRange.high.toFixed(4)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
 
       <Card title={t.relatedMarkets}>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-8">

@@ -696,3 +696,42 @@ Verified live: chart header shows real 1H change (-0.05%) and real
 render with real values (R3 23.7873 down to S3 23.6793); Upcoming
 Events now shows 3 real date groups (22/24/25 ก.ย.) with 6 real events
 total including 3 MEDIUM-impact ones that were previously hidden.
+
+## Dashboard tab: top-row restructure, chart polish, real Forecast context (2026-09-21, same day)
+
+Fourth round of feedback on the shipped Dashboard tab:
+
+1. **Top row restructured to 3 columns** (AUD/THB | Core FX Score +
+   Action Bias | Upcoming Events) -- Upcoming Events moved up from
+   further down the page into this row, per the user's explicit layout
+   ask. AUD/THB card also gained a real `Sparkline` (reusing
+   `components/v2/Sparkline.tsx`, already built for Related Markets)
+   from the same `technicalOutlook.priceSeries` already fetched, so the
+   card doesn't read as bare next to the taller Upcoming Events list.
+2. **Price & Technical**: removed the 1H-change/swing-range stat blocks
+   added earlier this same day (still supported as optional
+   `RangeChart` props, just no longer passed from this page -- Analysis
+   tab's own Price & Chart sub-tab still uses swing range). Chart made
+   bigger (260px -> 340px, 640 -> 720 viewBox width) and smoother: the
+   line now uses quadratic-bezier-through-midpoints smoothing
+   (`smoothPath()` in `RangeChart.tsx`) instead of straight segments --
+   passes through every real data point exactly, no overshoot past real
+   values (unlike a cardinal/Catmull-Rom spline), just a smoother curve
+   between them. Added faint background gridlines and a two-tone
+   current-point marker for polish.
+3. **Forecast cards** gained two real additions per horizon: a
+   direction arrow (↑/↓/→, same direction value already shown as text)
+   for a faster scan, and the *actual* real change over that same
+   window next to the *predicted* range -- 1H/4H reuse
+   `dashboard.change1H`/`change4H`; DAILY is newly derived in the page
+   itself from `technicalOutlook.priceSeries` (today's latest close vs.
+   the last completed day's close, the same completed-bar convention
+   the pivot calculation already uses) since no ready-made daily-change
+   field existed on `DashboardData`.
+
+Verified live: 3-column top row renders with a real sparkline in the
+AUD/THB card; Price & Technical chart renders larger and visibly
+smoother with the extra stat blocks gone; Forecast cards show real
+actual changes (-0.07%/-0.13%/-0.01% for 1H/4H/DAILY) alongside real
+predicted ranges and correct arrows (→ for NEUTRAL, matching today's
+in-band Core FX Score).
