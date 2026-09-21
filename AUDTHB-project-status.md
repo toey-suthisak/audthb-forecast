@@ -30,6 +30,36 @@ a schedule (`select * from cron.job` for the current list).
 | I | UI | Full redesign done: gradient header, per-section accent colors, 7-day trend sparklines, dismissible Alerts popup |
 | J | Backtest (`backtest_daily_rates`) | Live -- `/backtest` page + `BacktestPreview` on the dashboard, `lib/backtest-data.ts`. Auto-updated daily -- see below |
 
+**Technical Outlook added 2026-09-21** (new, deliberately separate from the
+Core FX Score / Forecast system above): `lib/technical-outlook-data.ts` +
+`components/TechnicalOutlook.tsx`, placed right after Hero/ActionSummary.
+User asked for a narrative daily-brief style report (shared a ChatGPT-
+generated example with support/resistance levels, news-analyst quotes, and
+a directive "Postfund, sized in tranches" call) and wanted it added to the
+Forecast area. Built the parts backed by this project's own real data --
+classic pivot points (P/R1-3/S1-3) computed from actual `market_prices`
+daily OHLC bars, a swing high/low range, and a narrative that restates (in
+prose) the Core FX Score component breakdown already computed elsewhere on
+the page -- and explicitly declined the parts that weren't: no fabricated
+news/analyst quotes (this app has no live news-narrative source; inventing
+one would mean writing fake citations into a production page), and the
+Action Bias reuses the exact same Core FX Score bias thresholds already
+used for `coreBias` everywhere else (not a new judgment call), labeled
+"informational only... not investment advice" rather than the sized
+position-sizing language ("Postfund Bias แบบแบ่งไม้") in the original
+example.
+
+Found and fixed a real bug during testing: `market_prices` queried without
+an explicit `.limit()` (ascending order) silently truncated at
+Supabase/PostgREST's 1000-row cap before reaching today's data -- the pivot
+was computing off 3-day-old data with no error surfaced. Fixed by querying
+descending with an explicit `.limit(3000)` (still hard-capped at 1000
+server-side, but now the *most recent* 1000 rows) and narrowing
+`SWING_LOOKBACK_DAYS` from 10 to 7 so the swing range stays within what
+actually fits under that cap as ingest volume grows. Verified live against
+real Supabase data before and after the fix (pivot date jumped from
+2026-09-19 to the correct 2026-09-20 once fixed).
+
 **Daily Forecast now shows a number -- deliberately, before it clearly beats a
 baseline**: as of 2026-09-18, `forecast_runs` had 46 matched outcomes for
 `DAILY`/`1.0.0`, clearing Evaluation's `MIN_SAMPLE_SIZE` gate of 20. This file

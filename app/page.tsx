@@ -17,9 +17,14 @@ import Evaluation from "@/components/Evaluation";
 import BacktestPreview from "@/components/BacktestPreview";
 import TrendChart from "@/components/TrendChart";
 import ActionSummary from "@/components/ActionSummary";
+import TechnicalOutlook from "@/components/TechnicalOutlook";
 
 import { getLocale } from "@/lib/i18n-server";
 import type { Locale } from "@/lib/i18n";
+
+import {
+  getTechnicalOutlook,
+} from "@/lib/technical-outlook-data";
 
 import {
   getDashboardData,
@@ -209,6 +214,9 @@ export default async function Home() {
   const newsSentiment =
     await getRecentNewsSignals();
 
+  const technicalOutlook =
+    await getTechnicalOutlook(locale, data);
+
   const bangkokHour = Number(
     new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Bangkok", hour: "2-digit", hour12: false }).format(new Date()),
   );
@@ -293,6 +301,13 @@ export default async function Home() {
               <ActionSummary data={data} locale={locale} />
             </div>
           </div>
+
+          {/* TECHNICAL OUTLOOK -- separate from Core FX Score / Forecast
+          above: real pivot levels from this project's own price history,
+          plus a narrative that restates (never invents) the factor
+          breakdown already shown elsewhere on this page. See
+          lib/technical-outlook-data.ts. */}
+          <TechnicalOutlook outlook={technicalOutlook} locale={locale} />
 
           <div className="grid lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-stone-200 dark:divide-stone-800">
             <DailyRecap recap={dailyRecap} data={data} locale={locale} />
