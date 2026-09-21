@@ -138,6 +138,9 @@ export default function AnalysisTabs({
               locale={locale}
               pivots={technicalOutlook.pivots}
               currentRate={technicalOutlook.currentRate}
+              swingLow={technicalOutlook.swingLow}
+              swingHigh={technicalOutlook.swingHigh}
+              swingDays={technicalOutlook.swingLookbackDays}
             />
           ) : (
             <p className="text-sm text-v2-muted">{technicalOutlook.error}</p>

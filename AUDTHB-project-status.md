@@ -665,3 +665,34 @@ every Related Markets row shows a real sparkline + % change (Iron Ore
 not a fixed 1H/24H window like the old dashboard fields, so these can
 span longer real ranges for symbols with deeper history than AUD/THB's
 own ~11 days).
+
+## Dashboard tab: chart header, pivot labels, event grouping (2026-09-21, same day)
+
+User reviewed a screenshot of the merged Price & Technical card and
+asked for 3 more changes:
+
+1. **Chart header felt bare**: `RangeChart` (`components/v2/
+   RangeChart.tsx`) gained optional `change1H`/`swingLow`/`swingHigh`/
+   `swingDays` props, rendered alongside the existing current-price
+   figure -- all real values already computed (`dashboard.change1H`,
+   `technicalOutlook.swingLow`/`swingHigh`/`swingLookbackDays`), just
+   not passed through before.
+2. **Pivot reference lines only showed labels (R3/R2/.../S3), not the
+   actual price**: each line's `<text>` now renders `${label} ${value}`
+   (e.g. "R3 23.7873") instead of just the label. Widened `PAD_LEFT`
+   (56 -> 78px) so the longer labels fit.
+3. **Upcoming Events was a flat top-4 HIGH-only list**: `getEconomicConsensus()`
+   already queries HIGH+MEDIUM AUD/USD/THB events for the current week
+   at the DB level, so the extra `impact === "HIGH"` and
+   `forecastValue !== null` filters in `app/(dashboard)/page.tsx` were
+   dropping real MEDIUM events and speech-only entries for no reason.
+   Removed both filters, grouped the remaining (not-yet-released)
+   events by `eventDate` with a date header per group and an impact
+   badge (HIGH/MEDIUM) per event, matching the user's ask ("show as
+   news for each respective day, all MEDIUM/HIGH").
+
+Verified live: chart header shows real 1H change (-0.05%) and real
+7-day swing range (23.6461-23.7831) next to current price; pivot lines
+render with real values (R3 23.7873 down to S3 23.6793); Upcoming
+Events now shows 3 real date groups (22/24/25 ก.ย.) with 6 real events
+total including 3 MEDIUM-impact ones that were previously hidden.

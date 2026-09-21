@@ -22,6 +22,8 @@ const STR = {
     showing: (n: number, from: string, to: string) => `Showing ${n} real day(s), ${from} to ${to}`,
     notEnough: "Not enough price history to chart yet.",
     currentPrice: "Current price",
+    change1H: "1H change",
+    swingRange: (days: number) => `${days}-day range`,
     pivotBasis: (date: string) => `Pivot based on ${date}'s close`,
   },
   th: {
@@ -29,24 +31,34 @@ const STR = {
     showing: (n: number, from: string, to: string) => `แสดงข้อมูลจริง ${n} วัน จาก ${from} ถึง ${to}`,
     notEnough: "ข้อมูลราคายังไม่พอสำหรับตีกราฟ",
     currentPrice: "ราคาปัจจุบัน",
+    change1H: "เปลี่ยนแปลง 1H",
+    swingRange: (days: number) => `กรอบ ${days} วัน`,
     pivotBasis: (date: string) => `คำนวณ Pivot จากราคาปิดวันที่ ${date}`,
   },
 } as const;
 
 const CHART_WIDTH = 640;
 const CHART_HEIGHT = 260;
-const PAD_LEFT = 56;
+const PAD_LEFT = 78;
 
 export default function RangeChart({
   series,
   locale,
   pivots = null,
   currentRate = null,
+  change1H = null,
+  swingLow = null,
+  swingHigh = null,
+  swingDays = null,
 }: {
   series: RangePoint[];
   locale: Locale;
   pivots?: PivotLevels | null;
   currentRate?: number | null;
+  change1H?: number | null;
+  swingLow?: number | null;
+  swingHigh?: number | null;
+  swingDays?: number | null;
 }) {
   const t = STR[locale];
   const [range, setRange] = useState<RangeDays>(30);
@@ -95,13 +107,33 @@ export default function RangeChart({
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-        {currentRate !== null && (
-          <div>
-            <p className="text-xs text-v2-muted">{t.currentPrice}</p>
-            <p className="font-mono text-2xl font-semibold text-v2-foreground">{currentRate.toFixed(4)}</p>
-          </div>
-        )}
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+        <div className="flex flex-wrap items-start gap-8">
+          {currentRate !== null && (
+            <div>
+              <p className="text-xs text-v2-muted">{t.currentPrice}</p>
+              <p className="font-mono text-2xl font-semibold text-v2-foreground">{currentRate.toFixed(4)}</p>
+            </div>
+          )}
+          {change1H !== null && (
+            <div>
+              <p className="text-xs text-v2-muted">{t.change1H}</p>
+              <p className={`font-mono text-lg font-semibold ${change1H >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                {change1H >= 0 ? "+" : ""}
+                {change1H.toFixed(2)}%
+              </p>
+            </div>
+          )}
+          {swingLow !== null && swingHigh !== null && swingDays !== null && (
+            <div>
+              <p className="text-xs text-v2-muted">{t.swingRange(swingDays)}</p>
+              <p className="font-mono text-lg font-semibold text-v2-foreground">
+                {swingLow.toFixed(4)} - {swingHigh.toFixed(4)}
+              </p>
+            </div>
+          )}
+        </div>
+
         <div className="flex items-center gap-1.5">
           {RANGE_DAYS.map((days) => (
             <button
@@ -141,8 +173,8 @@ export default function RangeChart({
                 strokeDasharray={line.emphasis ? "2 3" : "4 3"}
                 className={line.emphasis ? "stroke-indigo-400 dark:stroke-indigo-400" : "stroke-slate-300 dark:stroke-slate-700"}
               />
-              <text x={0} y={y} dy="0.32em" className="fill-v2-muted" style={{ fontSize: "10px" }}>
-                {line.label}
+              <text x={0} y={y} dy="0.32em" className="fill-v2-muted font-mono" style={{ fontSize: "10px" }}>
+                {line.label} {line.value.toFixed(4)}
               </text>
             </g>
           );

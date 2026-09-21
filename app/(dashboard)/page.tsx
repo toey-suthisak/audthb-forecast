@@ -28,7 +28,7 @@ const STR = {
     priceTechnical: "Price & Technical",
     forecast: "Forecast",
     upcoming: "Upcoming Events",
-    noUpcoming: "No upcoming HIGH-impact events with a forecast right now.",
+    noUpcoming: "No upcoming MEDIUM/HIGH-impact AUD/USD/THB events this week.",
     relatedMarkets: "Related Markets",
   },
   th: {
@@ -43,10 +43,14 @@ const STR = {
     priceTechnical: "ราคา & เทคนิค",
     forecast: "พยากรณ์",
     upcoming: "ข่าวที่จะประกาศเร็วๆ นี้",
-    noUpcoming: "ตอนนี้ไม่มีข่าวผลกระทบสูงที่มีตัวเลขคาดการณ์รอประกาศ",
+    noUpcoming: "สัปดาห์นี้ไม่มีข่าวผลกระทบปานกลาง/สูงของ AUD/USD/THB",
     relatedMarkets: "ตลาดที่เกี่ยวข้อง",
   },
 } as const;
+
+function impactTone(impact: "HIGH" | "MEDIUM"): ChipTone {
+  return impact === "HIGH" ? "red" : "amber";
+}
 
 function biasTone(direction: string): ChipTone {
   if (direction === "POSTFUND" || direction === "BULLISH") return "emerald";
@@ -81,9 +85,19 @@ export default async function DashboardPage() {
     getEconomicConsensus(),
   ]);
 
-  const upcoming = consensus.events
-    .filter((e) => e.impact === "HIGH" && e.forecastValue !== null && e.actualValue === null)
-    .slice(0, 4);
+  // Every MEDIUM/HIGH-impact AUD/USD/THB event this week that hasn't
+  // released yet -- getEconomicConsensus() already scopes to that
+  // impact/currency set at the query level, so no extra filtering here
+  // beyond "still upcoming". Grouped by date per the user's request
+  // ("news for each respective day"), not a flat top-N list.
+  const upcomingByDate = new Map<string, typeof consensus.events>();
+  for (const event of consensus.events) {
+    if (event.actualValue !== null) continue;
+    const bucket = upcomingByDate.get(event.eventDate);
+    if (bucket) bucket.push(event);
+    else upcomingByDate.set(event.eventDate, [event]);
+  }
+  const upcomingGroups = Array.from(upcomingByDate.entries()).sort(([a], [b]) => a.localeCompare(b));
 
   const rangeSeries = technicalOutlook.priceSeries.map((p) => ({ date: p.date, close: p.close }));
 
@@ -167,6 +181,10 @@ export default async function DashboardPage() {
           locale={locale}
           pivots={technicalOutlook.pivots}
           currentRate={technicalOutlook.currentRate}
+          change1H={data.change1H}
+          swingLow={technicalOutlook.swingLow}
+          swingHigh={technicalOutlook.swingHigh}
+          swingDays={technicalOutlook.swingLookbackDays}
         />
       </Card>
 
@@ -187,22 +205,33 @@ export default async function DashboardPage() {
           </div>
         </Card>
 
-        <Card title={t.upcoming}>
-          {upcoming.length === 0 ? (
-            <p className="text-sm text-v2-muted">{t.noUpcoming}</p>
+        <Card title={t.upcoming} padded={false}>
+          {upcomingGroups.length === 0 ? (
+            <p className="text-sm text-v2-muted p-5">{t.noUpcoming}</p>
           ) : (
-            <div className="space-y-3">
-              {upcoming.map((e, i) => (
-                <div key={i} className="text-sm">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <p className="text-v2-foreground font-medium">
-                      {e.currency} {e.eventName}
-                    </p>
-                    <p className="text-[11px] text-v2-muted shrink-0">{formatEventDate(e.eventDate, locale)}</p>
-                  </div>
-                  <p className="text-xs text-v2-muted font-mono">
-                    {e.forecastValue ?? "--"} / {e.previousValue ?? "--"}
+            <div className="max-h-[360px] overflow-y-auto">
+              {upcomingGroups.map(([date, events]) => (
+                <div key={date} className="px-5 py-3 border-b border-v2-border last:border-b-0">
+                  <p className="text-[11px] font-semibold text-v2-muted uppercase tracking-wide mb-2">
+                    {formatEventDate(date, locale)}
                   </p>
+                  <div className="space-y-2.5">
+                    {events.map((e, i) => (
+                      <div key={i} className="text-sm">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-v2-foreground font-medium">
+                            {e.currency} {e.eventName}
+                          </p>
+                          <BadgeChip label={e.impact} tone={impactTone(e.impact)} />
+                        </div>
+                        {(e.forecastValue !== null || e.previousValue !== null) && (
+                          <p className="text-xs text-v2-muted font-mono">
+                            {e.forecastValue ?? "--"} / {e.previousValue ?? "--"}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
