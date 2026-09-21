@@ -939,3 +939,32 @@ screenshot still renders visually dark in light mode, a known
 rendering/capture quirk noted earlier this session, not a real bug --
 verified via computed styles, not pixels). `npx tsc --noEmit` and
 `npx next build` both pass clean.
+
+## Fixed: `InfoTooltip` did nothing on hover (2026-09-21, same day)
+
+User reported the tooltip "i" icons did nothing on hover. Root cause:
+`InfoTooltip.tsx` used the browser's native `title` attribute, which
+in practice has a ~1s hover delay before Chrome shows it, is easy to
+trigger-and-move-away before it appears, and doesn't fire at all on
+touch -- exactly what "nothing happens" describes. Replaced with a
+self-contained CSS-only tooltip (`group` + `group-hover:opacity-100`
++ `group-focus-within:opacity-100`, still zero client JS, still works
+in this async Server Component) that appears instantly and
+consistently, plus opens on keyboard focus for accessibility.
+
+While verifying, hit a red herring worth remembering: a long-running
+local dev server (same Next.js process across many edits/turns this
+session) served a stale CSS chunk missing the newly-introduced
+opacity/group-hover utility classes, making the fix look broken in
+the Browser pane even though the code was correct -- `rm -rf .next` +
+restarting the dev server resolved it. Production/Vercel always does
+a full fresh build per deploy, so this stale-dev-cache issue is a
+local-only quirk, not something that reaches users -- but worth
+remembering if a Tailwind class ever appears to have "no effect" in a
+long-lived local dev session again: clear `.next` before concluding
+the code itself is wrong.
+
+Verified: `getComputedStyle` on the tooltip panel shows `opacity: 0`
+at rest and `opacity: 1` on a real (CDP-driven) hover, confirmed for
+multiple tooltips on the page. `npx tsc --noEmit` and `npx next build`
+both pass clean.
