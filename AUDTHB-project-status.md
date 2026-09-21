@@ -60,6 +60,23 @@ actually fits under that cap as ingest volume grows. Verified live against
 real Supabase data before and after the fix (pivot date jumped from
 2026-09-19 to the correct 2026-09-20 once fixed).
 
+**Technical Outlook extended same day**: user asked for current price,
+an actual chart (not just numbers), and to fold in the real forecast/
+previous economic data already sitting in `economic_consensus` (the same
+ForexFactory-sourced table Market Consensus reads) rather than needing
+fabricated news to make the panel feel complete. Added `currentRate` and
+`priceSeries` (the same daily bars already computed for pivots/swing, no
+second query) to `getTechnicalOutlook`'s return; `components/
+TechnicalOutlook.tsx` gained a plain hand-rolled SVG chart (same
+no-library convention as `TrendChart.tsx`) plotting the price line against
+all five pivot levels on one shared scale -- a level the price hasn't
+reached yet (e.g. R2 in a quiet week) still draws on-chart instead of
+clipping. The narrative now also pulls up to 2 upcoming HIGH-impact
+events (forecast/previous, with the existing `POLARITY_RULES`-derived
+lean when available) straight from `getEconomicConsensus()` -- verified
+live to match Market Consensus's own numbers exactly (AUD Employment
+Change: forecast 20.9K, previous -15.8K, leans bullish).
+
 **Daily Forecast now shows a number -- deliberately, before it clearly beats a
 baseline**: as of 2026-09-18, `forecast_runs` had 46 matched outcomes for
 `DAILY`/`1.0.0`, clearing Evaluation's `MIN_SAMPLE_SIZE` gate of 20. This file

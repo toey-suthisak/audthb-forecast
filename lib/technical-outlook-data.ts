@@ -2,6 +2,7 @@ import "server-only";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import type { Locale } from "@/lib/i18n";
 import type { DashboardData } from "@/lib/dashboard-data";
+import { getEconomicConsensus, type ConsensusEvent } from "@/lib/economic-consensus-data";
 
 // =========================================================
 // SEPARATE FROM CORE FX SCORE / FORECAST ON PURPOSE.
@@ -57,6 +58,13 @@ const STR = {
     neutralAction: "No clear lean",
     actionNote: (label: string) =>
       `${label} -- informational only, derived directly from the Core FX Score's own bias thresholds. Not investment advice, and the underlying forecast is still UNCALIBRATED.`,
+    currentPrice: "Current price",
+    upcomingEvent: (event: string, currency: string, forecast: string, previous: string) =>
+      `Upcoming: ${currency} ${event} -- forecast ${forecast}, previous ${previous}`,
+    upcomingEventNoPrevious: (event: string, currency: string, forecast: string) =>
+      `Upcoming: ${currency} ${event} -- forecast ${forecast}`,
+    leanBullish: "(leans bullish for the currency)",
+    leanBearish: "(leans bearish for the currency)",
   },
   th: {
     disclaimer:
@@ -92,6 +100,13 @@ const STR = {
     neutralAction: "ยังไม่มีทิศทางชัดเจน",
     actionNote: (label: string) =>
       `${label} -- เป็นข้อมูลประกอบการตัดสินใจเท่านั้น มาจาก threshold คะแนน Core FX Score ตัวเดียวกับที่ใช้ทั้งหน้านี้ ไม่ใช่คำแนะนำการลงทุน และ forecast ที่อ้างอิงยังเป็น UNCALIBRATED อยู่`,
+    currentPrice: "ราคาปัจจุบัน",
+    upcomingEvent: (event: string, currency: string, forecast: string, previous: string) =>
+      `ข่าวที่จะประกาศเร็วๆ นี้: ${currency} ${event} -- คาดการณ์ ${forecast} จากเดิม ${previous}`,
+    upcomingEventNoPrevious: (event: string, currency: string, forecast: string) =>
+      `ข่าวที่จะประกาศเร็วๆ นี้: ${currency} ${event} -- คาดการณ์ ${forecast}`,
+    leanBullish: "(เอนบวกต่อค่าเงินนั้น)",
+    leanBearish: "(เอนลบต่อค่าเงินนั้น)",
   },
 } as const;
 
@@ -108,13 +123,17 @@ export type PivotLevels = {
   basedOnDate: string;
 };
 
+export type PricePoint = { date: string; close: number };
+
 export type TechnicalOutlook = {
   available: boolean;
   disclaimer: string;
+  currentRate: number | null;
   pivots: PivotLevels | null;
   swingHigh: number | null;
   swingLow: number | null;
   swingLookbackDays: number;
+  priceSeries: PricePoint[];
   narrative: string[];
   actionBias: {
     direction: "POSTFUND" | "PREFUND" | "NEUTRAL";
@@ -179,6 +198,16 @@ function round(value: number, decimals = 4): number {
   return Number(value.toFixed(decimals));
 }
 
+function formatUpcomingEvent(event: ConsensusEvent, t: (typeof STR)[Locale]): string {
+  const base = event.previousValue
+    ? t.upcomingEvent(event.eventName, event.currency, event.forecastValue ?? "-", event.previousValue)
+    : t.upcomingEventNoPrevious(event.eventName, event.currency, event.forecastValue ?? "-");
+
+  if (event.lean === "BULLISH") return `${base} ${t.leanBullish}`;
+  if (event.lean === "BEARISH") return `${base} ${t.leanBearish}`;
+  return base;
+}
+
 // Supabase/PostgREST caps a query at 1000 rows regardless of .limit(),
 // and AUD/THB runs ~140 rows/day -- 7 days safely fits under that cap
 // with room as volume grows; a longer nominal lookback would just get
@@ -194,10 +223,12 @@ export async function getTechnicalOutlook(
   const empty = (error: string | null): TechnicalOutlook => ({
     available: false,
     disclaimer: t.disclaimer,
+    currentRate: null,
     pivots: null,
     swingHigh: null,
     swingLow: null,
     swingLookbackDays: SWING_LOOKBACK_DAYS,
+    priceSeries: [],
     narrative: [],
     actionBias: { direction: "NEUTRAL", label: t.neutralAction, note: t.actionNote(t.neutralAction) },
     error,
@@ -266,6 +297,21 @@ export async function getTechnicalOutlook(
     else narrative.push(t.betweenS1R1(pivots.s1, pivots.r1));
   }
 
+  // Real forecast/previous values, not invented ones -- economic_consensus
+  // is the same ForexFactory-sourced table Market Consensus already
+  // displays (lib/economic-consensus-data.ts), so nothing here is new
+  // data, just reused in this panel's narrative too. Only events with an
+  // actual forecast (skips speeches/holidays) and no actual value yet
+  // (already-released numbers belong in the past, not an "upcoming" line).
+  const consensus = await getEconomicConsensus();
+  const upcoming = consensus.events
+    .filter((e) => e.impact === "HIGH" && e.forecastValue !== null && e.actualValue === null)
+    .slice(0, 2);
+
+  for (const event of upcoming) {
+    narrative.push(formatUpcomingEvent(event, t));
+  }
+
   // Same bias thresholds as coreBias elsewhere in this app (>=15 / <=-15),
   // not a new judgment call -- see lib/dashboard-data.ts.
   let direction: TechnicalOutlook["actionBias"]["direction"] = "NEUTRAL";
@@ -280,9 +326,15 @@ export async function getTechnicalOutlook(
     }
   }
 
+  // Daily closes for the chart, including today's still-filling-in bar
+  // so the line reaches the current price -- same bars already computed
+  // above for the pivot/swing math, not a second query.
+  const priceSeries: PricePoint[] = bars.map((bar) => ({ date: bar.date, close: round(bar.close) }));
+
   return {
     available: true,
     disclaimer: t.disclaimer,
+    currentRate: currentRate !== null ? round(currentRate) : null,
     pivots: {
       pivot: round(pivots.pivot),
       r1: round(pivots.r1),
@@ -296,6 +348,7 @@ export async function getTechnicalOutlook(
     swingHigh: round(swingHigh),
     swingLow: round(swingLow),
     swingLookbackDays: SWING_LOOKBACK_DAYS,
+    priceSeries,
     narrative,
     actionBias: { direction, label, note: t.actionNote(label) },
     error: null,
