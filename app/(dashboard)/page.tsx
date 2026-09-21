@@ -5,6 +5,19 @@ import RangeChart from "@/components/v2/RangeChart";
 import WatchlistRow from "@/components/v2/WatchlistRow";
 import InfoTooltip from "@/components/v2/InfoTooltip";
 import CautionToast from "@/components/v2/CautionToast";
+import ScoreGauge from "@/components/v2/ScoreGauge";
+import {
+  IconExchange,
+  IconGauge,
+  IconCompass,
+  IconCandles,
+  IconLayers,
+  IconPulse,
+  IconTarget,
+  IconBars,
+  IconCalendar,
+  IconGlobe,
+} from "@/components/v2/Icon";
 import { getLocale } from "@/lib/i18n-server";
 import { tLabel } from "@/lib/i18n";
 import { getDashboardData } from "@/lib/dashboard-data";
@@ -17,6 +30,8 @@ import { computeContributions, rawFactorsFromDashboard, type FactorKey } from "@
 import type { ChipTone } from "@/components/v2/BadgeChip";
 
 export const dynamic = "force-dynamic";
+
+const ICON_CLASS = "h-3.5 w-3.5";
 
 const STR = {
   en: {
@@ -31,7 +46,6 @@ const STR = {
     confidence: "Confidence",
     scoreDetails: "Score details",
     outlookToday: "Today's Outlook",
-    outlookDesc: (label: string) => `Signals are ${label.toLowerCase()} right now -- no clear direction yet, waiting for the numbers to firm up.`,
     breakoutUp: "If it breaks above",
     breakoutDown: "If it breaks below",
     postfund: "Postfund",
@@ -87,7 +101,6 @@ const STR = {
     confidence: "ความมั่นใจ",
     scoreDetails: "ดูรายละเอียดคะแนน",
     outlookToday: "มุมมองวันนี้",
-    outlookDesc: (label: string) => `สัญญาณตอนนี้ยังผสมกันอยู่ในระดับ${label} -- ยังไม่มีทิศทางชัดเจน รอตัวเลขที่แน่นกว่านี้`,
     breakoutUp: "ถ้าทะลุ",
     breakoutDown: "ถ้าหลุด",
     postfund: "Postfund",
@@ -165,6 +178,13 @@ function biasTextClass(direction: string): string {
   return "text-v2-muted";
 }
 
+function directionBarClass(direction: string): string {
+  const tone = biasTone(direction);
+  if (tone === "emerald") return "bg-emerald-500";
+  if (tone === "red") return "bg-red-500";
+  return "bg-slate-300 dark:bg-slate-600";
+}
+
 function DirectionArrow({ direction }: { direction: string }) {
   const symbol = direction === "BULLISH" ? "↑" : direction === "BEARISH" ? "↓" : "→";
   return <span className={`text-lg leading-none ${biasTextClass(direction)}`}>{symbol}</span>;
@@ -183,6 +203,13 @@ function changeColorClass(pct: number | null): string {
   return "text-v2-muted";
 }
 
+function scoreColorClass(score: number | null): string {
+  if (score === null) return "text-v2-foreground";
+  if (score >= 15) return "text-emerald-600 dark:text-emerald-400";
+  if (score <= -15) return "text-red-600 dark:text-red-400";
+  return "text-amber-600 dark:text-amber-400";
+}
+
 function formatEventDate(isoDate: string, locale: "en" | "th"): string {
   return new Date(isoDate).toLocaleDateString(locale === "th" ? "th-TH" : "en-GB", {
     weekday: "short",
@@ -190,6 +217,18 @@ function formatEventDate(isoDate: string, locale: "en" | "th"): string {
     month: "short",
     year: "numeric",
   });
+}
+
+// Small tinted stat tile -- shared visual shape for the 3/4-across
+// mini-stats under the AUD/THB and Price & Technical cards, instead of
+// bare label/value text columns.
+function StatTile({ label, value, valueClass = "text-v2-foreground" }: { label: string; value: string; valueClass?: string }) {
+  return (
+    <div className="rounded-lg bg-v2-bg/70 dark:bg-slate-800/40 px-3 py-2.5">
+      <p className="text-[11px] text-v2-muted">{label}</p>
+      <p className={`font-mono text-sm font-semibold ${valueClass}`}>{value}</p>
+    </div>
+  );
 }
 
 export default async function DashboardPage() {
@@ -230,9 +269,7 @@ export default async function DashboardPage() {
       })
     : null;
 
-  const gaugePct = data.coreFxScore !== null ? ((data.coreFxScore + 100) / 200) * 100 : 50;
-
-  const { factors, availableWeight } = computeContributions(rawFactorsFromDashboard(data));
+  const { factors } = computeContributions(rawFactorsFromDashboard(data));
 
   const smaTrend: "up" | "down" | "flat" =
     technicalOutlook.smaShortValue === null || technicalOutlook.currentRate === null
@@ -252,27 +289,31 @@ export default async function DashboardPage() {
         : "down";
 
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-8">
+      <div className="pointer-events-none absolute inset-x-0 -top-6 -z-10 flex justify-center overflow-hidden">
+        <div className="h-64 w-[36rem] rounded-full bg-blue-400/10 dark:bg-blue-500/10 blur-3xl" />
+      </div>
+
       <CautionToast alerts={alerts} locale={locale} />
 
       {/* Row 1: AUD/THB | FX Score | Today's Outlook */}
       <div className="grid lg:grid-cols-3 gap-6">
-        <Card>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium text-v2-muted uppercase tracking-wide flex items-center gap-1.5">
-                {t.rate}
-                <InfoTooltip text={t.tip.rate} />
-              </p>
-              {t.ratePair && <p className="text-[11px] text-v2-muted">{t.ratePair}</p>}
-            </div>
-            <BadgeChip label={t.live} tone="emerald" dot />
-          </div>
-          <p className="font-mono mt-1 text-3xl font-semibold text-v2-foreground">
+        <Card
+          icon={<IconExchange className={ICON_CLASS} />}
+          title={
+            <span className="flex items-center gap-1.5">
+              {t.rate}
+              <InfoTooltip text={t.tip.rate} />
+            </span>
+          }
+          action={<BadgeChip label={t.live} tone="emerald" dot />}
+        >
+          {t.ratePair && <p className="text-[11px] text-v2-muted">{t.ratePair}</p>}
+          <p className="font-mono mt-1.5 text-4xl font-bold tracking-tight text-v2-foreground">
             {data.latestPrice ? Number(data.latestPrice.rate).toFixed(4) : "--"}
           </p>
           {data.change1H !== null && data.latestPrice && (
-            <p className={`text-sm mt-1 ${changeColorClass(data.change1H)}`}>
+            <p className={`text-sm mt-1 font-medium ${changeColorClass(data.change1H)}`}>
               {data.change1H >= 0 ? "+" : ""}
               {((data.change1H * Number(data.latestPrice.rate)) / 100).toFixed(4)} ({data.change1H >= 0 ? "+" : ""}
               {data.change1H.toFixed(2)}%, 1H)
@@ -280,54 +321,33 @@ export default async function DashboardPage() {
           )}
           {updatedTime && <p className="text-[11px] text-v2-muted mt-1">{t.updated(updatedTime)}</p>}
 
-          <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-v2-border text-xs text-v2-muted">
-            <div>
-              <p>{t.high}</p>
-              <p className="font-mono text-v2-foreground">{data.intradayHigh?.toFixed(4) ?? "--"}</p>
-            </div>
-            <div>
-              <p>{t.low}</p>
-              <p className="font-mono text-v2-foreground">{data.intradayLow?.toFixed(4) ?? "--"}</p>
-            </div>
-            <div>
-              <p>{t.today}</p>
-              <p className={`font-mono ${changeColorClass(dailyChangePct)}`}>
-                {dailyChangePct !== null ? `${dailyChangePct >= 0 ? "+" : ""}${dailyChangePct.toFixed(2)}%` : "--"}
-              </p>
-            </div>
+          <div className="grid grid-cols-3 gap-2 mt-4">
+            <StatTile label={t.high} value={data.intradayHigh?.toFixed(4) ?? "--"} />
+            <StatTile label={t.low} value={data.intradayLow?.toFixed(4) ?? "--"} />
+            <StatTile
+              label={t.today}
+              value={dailyChangePct !== null ? `${dailyChangePct >= 0 ? "+" : ""}${dailyChangePct.toFixed(2)}%` : "--"}
+              valueClass={changeColorClass(dailyChangePct)}
+            />
           </div>
         </Card>
 
-        <Card>
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-v2-muted uppercase tracking-wide flex items-center gap-1.5">
+        <Card
+          icon={<IconGauge className={ICON_CLASS} />}
+          title={
+            <span className="flex items-center gap-1.5">
               {t.fxScore}
               <InfoTooltip text={t.tip.fxScore} />
+            </span>
+          }
+        >
+          <div className="flex flex-col items-center">
+            <ScoreGauge value={data.coreFxScore} size={200} />
+            <p className={`font-mono -mt-1 text-4xl font-bold ${scoreColorClass(data.coreFxScore)}`}>
+              {data.coreFxScore !== null ? `${data.coreFxScore > 0 ? "+" : ""}${data.coreFxScore}` : "--"}
             </p>
-          </div>
-          <p
-            className={`font-mono mt-1 text-4xl font-bold ${
-              data.coreFxScore === null
-                ? "text-v2-foreground"
-                : data.coreFxScore >= 15
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : data.coreFxScore <= -15
-                    ? "text-red-600 dark:text-red-400"
-                    : "text-amber-600 dark:text-amber-400"
-            }`}
-          >
-            {data.coreFxScore !== null ? `${data.coreFxScore > 0 ? "+" : ""}${data.coreFxScore}` : "--"}
-            <span className="text-base font-medium text-v2-muted ml-2">{tLabel(data.coreBias, locale)}</span>
-          </p>
-
-          <div className="mt-4">
-            <div className="relative h-2 rounded-full bg-gradient-to-r from-red-400 via-slate-200 to-emerald-400 dark:via-slate-700">
-              <div
-                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-3.5 w-3.5 rounded-full bg-white border-2 border-slate-500 dark:border-slate-300 shadow"
-                style={{ left: `${gaugePct}%` }}
-              />
-            </div>
-            <div className="flex items-center justify-between text-[11px] text-v2-muted mt-1">
+            <p className="text-sm text-v2-muted">{tLabel(data.coreBias, locale)}</p>
+            <div className="flex items-center justify-between w-full max-w-[200px] text-[11px] text-v2-muted mt-2">
               <span>-100</span>
               <span>0</span>
               <span>+100</span>
@@ -345,12 +365,16 @@ export default async function DashboardPage() {
           </div>
         </Card>
 
-        <Card>
-          <p className="text-xs font-medium text-v2-muted uppercase tracking-wide flex items-center gap-1.5">
-            {t.outlookToday}
-            <InfoTooltip text={t.tip.outlookToday} />
-          </p>
-          <p className={`text-2xl font-bold mt-1 ${biasTextClass(technicalOutlook.actionBias.direction)}`}>
+        <Card
+          icon={<IconCompass className={ICON_CLASS} />}
+          title={
+            <span className="flex items-center gap-1.5">
+              {t.outlookToday}
+              <InfoTooltip text={t.tip.outlookToday} />
+            </span>
+          }
+        >
+          <p className={`text-2xl font-bold ${biasTextClass(technicalOutlook.actionBias.direction)}`}>
             {technicalOutlook.actionBias.label}
           </p>
           <p className="text-xs text-v2-muted mt-2 leading-relaxed">{technicalOutlook.actionBias.note}</p>
@@ -379,6 +403,7 @@ export default async function DashboardPage() {
       {/* Row 2: Price chart | Technical Levels + Signals */}
       <div className="grid lg:grid-cols-2 gap-6">
         <Card
+          icon={<IconCandles className={ICON_CLASS} />}
           title={
             <span className="flex items-center gap-1.5">
               {t.priceTechnical}
@@ -386,46 +411,37 @@ export default async function DashboardPage() {
             </span>
           }
         >
-            <RangeChart
-              series={rangeSeries}
-              locale={locale}
-              pivots={technicalOutlook.pivots}
-              currentRate={technicalOutlook.currentRate}
+          <RangeChart
+            series={rangeSeries}
+            locale={locale}
+            pivots={technicalOutlook.pivots}
+            currentRate={technicalOutlook.currentRate}
+          />
+          <div className="grid grid-cols-4 gap-2 mt-4 pt-4 border-t border-v2-border">
+            <StatTile label={t.change1H} value={data.change1H !== null ? `${data.change1H >= 0 ? "+" : ""}${data.change1H.toFixed(2)}%` : "--"} valueClass={changeColorClass(data.change1H)} />
+            <StatTile label={t.change4H} value={data.change4H !== null ? `${data.change4H >= 0 ? "+" : ""}${data.change4H.toFixed(2)}%` : "--"} valueClass={changeColorClass(data.change4H)} />
+            <StatTile
+              label={t.swingRange(technicalOutlook.swingLookbackDays)}
+              value={
+                technicalOutlook.swingLow !== null && technicalOutlook.swingHigh !== null
+                  ? `${technicalOutlook.swingLow.toFixed(4)}-${technicalOutlook.swingHigh.toFixed(4)}`
+                  : "--"
+              }
             />
-            <div className="grid grid-cols-4 gap-2 mt-4 pt-4 border-t border-v2-border text-xs">
-              <div>
-                <p className="text-v2-muted">{t.change1H}</p>
-                <p className={`font-mono ${changeColorClass(data.change1H)}`}>
-                  {data.change1H !== null ? `${data.change1H >= 0 ? "+" : ""}${data.change1H.toFixed(2)}%` : "--"}
-                </p>
-              </div>
-              <div>
-                <p className="text-v2-muted">{t.change4H}</p>
-                <p className={`font-mono ${changeColorClass(data.change4H)}`}>
-                  {data.change4H !== null ? `${data.change4H >= 0 ? "+" : ""}${data.change4H.toFixed(2)}%` : "--"}
-                </p>
-              </div>
-              <div>
-                <p className="text-v2-muted">{t.swingRange(technicalOutlook.swingLookbackDays)}</p>
-                <p className="font-mono text-v2-foreground">
-                  {technicalOutlook.swingLow !== null && technicalOutlook.swingHigh !== null
-                    ? `${technicalOutlook.swingLow.toFixed(4)} - ${technicalOutlook.swingHigh.toFixed(4)}`
-                    : "--"}
-                </p>
-              </div>
-              <div>
-                <p className="text-v2-muted">{t.todayRange}</p>
-                <p className="font-mono text-v2-foreground">
-                  {data.intradayLow !== null && data.intradayHigh !== null
-                    ? `${data.intradayLow.toFixed(4)} - ${data.intradayHigh.toFixed(4)}`
-                    : "--"}
-                </p>
-              </div>
-            </div>
-          </Card>
+            <StatTile
+              label={t.todayRange}
+              value={
+                data.intradayLow !== null && data.intradayHigh !== null
+                  ? `${data.intradayLow.toFixed(4)}-${data.intradayHigh.toFixed(4)}`
+                  : "--"
+              }
+            />
+          </div>
+        </Card>
 
         <div className="space-y-6">
           <Card
+            icon={<IconLayers className={ICON_CLASS} />}
             title={
               <span className="flex items-center gap-1.5">
                 {t.technicalLevels}
@@ -434,17 +450,18 @@ export default async function DashboardPage() {
             }
           >
             {technicalOutlook.pivots ? (
-              <div className="space-y-2 text-sm">
+              <div className="space-y-1.5">
                 {[
-                  { label: "R2", value: technicalOutlook.pivots.r2, cls: "text-red-600 dark:text-red-400" },
-                  { label: "R1", value: technicalOutlook.pivots.r1, cls: "text-red-600 dark:text-red-400" },
-                  { label: "Pivot", value: technicalOutlook.pivots.pivot, cls: "text-v2-foreground" },
-                  { label: "S1", value: technicalOutlook.pivots.s1, cls: "text-emerald-600 dark:text-emerald-400" },
-                  { label: "S2", value: technicalOutlook.pivots.s2, cls: "text-emerald-600 dark:text-emerald-400" },
+                  { label: "R2", value: technicalOutlook.pivots.r2, cls: "text-red-600 dark:text-red-400", bar: "bg-red-500" },
+                  { label: "R1", value: technicalOutlook.pivots.r1, cls: "text-red-600 dark:text-red-400", bar: "bg-red-400" },
+                  { label: "Pivot", value: technicalOutlook.pivots.pivot, cls: "text-v2-foreground", bar: "bg-slate-400 dark:bg-slate-500" },
+                  { label: "S1", value: technicalOutlook.pivots.s1, cls: "text-emerald-600 dark:text-emerald-400", bar: "bg-emerald-400" },
+                  { label: "S2", value: technicalOutlook.pivots.s2, cls: "text-emerald-600 dark:text-emerald-400", bar: "bg-emerald-500" },
                 ].map((row) => (
-                  <div key={row.label} className="flex items-center justify-between">
-                    <span className="text-v2-muted">{row.label}</span>
-                    <span className={`font-mono font-semibold ${row.cls}`}>{row.value.toFixed(4)}</span>
+                  <div key={row.label} className="flex items-center gap-3 rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${row.bar}`} />
+                    <span className="text-sm text-v2-muted flex-1">{row.label}</span>
+                    <span className={`font-mono text-sm font-semibold ${row.cls}`}>{row.value.toFixed(4)}</span>
                   </div>
                 ))}
               </div>
@@ -454,6 +471,7 @@ export default async function DashboardPage() {
           </Card>
 
           <Card
+            icon={<IconPulse className={ICON_CLASS} />}
             title={
               <span className="flex items-center gap-1.5">
                 {t.technicalSignals}
@@ -461,29 +479,29 @@ export default async function DashboardPage() {
               </span>
             }
           >
-            <div className="space-y-2.5 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-v2-muted">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
+                <span className="text-sm text-v2-muted">
                   {technicalOutlook.smaShortPeriod !== null ? `SMA(${technicalOutlook.smaShortPeriod})` : "SMA"}
                 </span>
                 <span className="flex items-center gap-2">
-                  <span className="font-mono text-v2-foreground">{technicalOutlook.smaShortValue?.toFixed(4) ?? "--"}</span>
+                  <span className="font-mono text-sm font-semibold text-v2-foreground">{technicalOutlook.smaShortValue?.toFixed(4) ?? "--"}</span>
                   <TrendArrow trend={smaTrend} />
                 </span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-v2-muted">
+              <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
+                <span className="text-sm text-v2-muted">
                   {technicalOutlook.rsiPeriod !== null ? `RSI(${technicalOutlook.rsiPeriod})` : "RSI"}
                 </span>
                 <span className="flex items-center gap-2">
-                  <span className="font-mono text-v2-foreground">{technicalOutlook.rsiValue?.toFixed(1) ?? "--"}</span>
+                  <span className="font-mono text-sm font-semibold text-v2-foreground">{technicalOutlook.rsiValue?.toFixed(1) ?? "--"}</span>
                   <TrendArrow trend={rsiTrend} />
                 </span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-v2-muted">{t.trendShort}</span>
+              <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
+                <span className="text-sm text-v2-muted">{t.trendShort}</span>
                 <span className="flex items-center gap-2">
-                  <span className="text-v2-foreground">
+                  <span className="text-sm text-v2-foreground">
                     {technicalOutlook.smaShortPeriod !== null
                       ? smaTrend === "up"
                         ? t.aboveSma(technicalOutlook.smaShortPeriod)
@@ -494,8 +512,8 @@ export default async function DashboardPage() {
                 </span>
               </div>
               {technicalOutlook.smaLongPeriod !== null && technicalOutlook.smaShortPeriod !== null && (
-                <div className="flex items-center justify-between">
-                  <span className="text-v2-muted">
+                <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
+                  <span className="text-sm text-v2-muted">
                     {crossTrend === "up"
                       ? t.smaCrossUp(technicalOutlook.smaShortPeriod, technicalOutlook.smaLongPeriod)
                       : t.smaCrossDown(technicalOutlook.smaShortPeriod, technicalOutlook.smaLongPeriod)}
@@ -511,6 +529,7 @@ export default async function DashboardPage() {
       {/* Row 3: Forecast | Score Breakdown */}
       <div className="grid lg:grid-cols-2 gap-6">
         <Card
+          icon={<IconTarget className={ICON_CLASS} />}
           title={
             <span className="flex items-center gap-1.5">
               {t.forecast}
@@ -518,48 +537,50 @@ export default async function DashboardPage() {
             </span>
           }
         >
-            <div className="grid sm:grid-cols-3 gap-4">
-              {technicalOutlook.forecasts.map((f) => (
-                <div key={f.horizon} className="rounded-lg border border-v2-border p-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold text-v2-muted">{f.horizon}</p>
-                    <DirectionArrow direction={f.direction} />
-                  </div>
-
-                  <p className={`text-base font-semibold mt-1 ${biasTextClass(f.direction)}`}>{tLabel(f.direction, locale)}</p>
-
-                  {f.priceRange && (
-                    <p className="font-mono text-sm text-v2-foreground mt-2">
-                      {f.priceRange.low.toFixed(4)} - {f.priceRange.high.toFixed(4)}
-                    </p>
-                  )}
-                  <p className="text-xs text-v2-muted font-mono">
-                    ({f.predictedRangeLowPct >= 0 ? "+" : ""}
-                    {f.predictedRangeLowPct.toFixed(2)}% | {f.predictedRangeHighPct >= 0 ? "+" : ""}
-                    {f.predictedRangeHighPct.toFixed(2)}%)
-                  </p>
-
-                  <div className="mt-3 pt-3 border-t border-v2-border">
-                    {f.trackRecord && !f.trackRecord.insufficientData && f.trackRecord.directionalAccuracyPct !== null ? (
-                      <p className="text-xs text-v2-muted leading-relaxed">
-                        {t.directionalAccuracy(f.trackRecord.directionalAccuracyPct, f.trackRecord.sampleSize)}
-                        {f.trackRecord.baselineAccuracyPct !== null && (
-                          <>
-                            <br />
-                            {t.vsBaseline(f.trackRecord.baselineAccuracyPct)}
-                          </>
-                        )}
-                      </p>
-                    ) : (
-                      <p className="text-xs text-v2-muted">{t.notEnoughTrack}</p>
-                    )}
-                  </div>
+          <div className="grid sm:grid-cols-3 gap-4">
+            {technicalOutlook.forecasts.map((f) => (
+              <div key={f.horizon} className="relative overflow-hidden rounded-xl border border-v2-border pt-5 p-4">
+                <span className={`absolute inset-x-0 top-0 h-1 ${directionBarClass(f.direction)}`} />
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-v2-muted">{f.horizon}</p>
+                  <DirectionArrow direction={f.direction} />
                 </div>
-              ))}
-            </div>
-          </Card>
+
+                <p className={`text-base font-semibold mt-1 ${biasTextClass(f.direction)}`}>{tLabel(f.direction, locale)}</p>
+
+                {f.priceRange && (
+                  <p className="font-mono text-sm text-v2-foreground mt-2">
+                    {f.priceRange.low.toFixed(4)} - {f.priceRange.high.toFixed(4)}
+                  </p>
+                )}
+                <p className="text-xs text-v2-muted font-mono">
+                  ({f.predictedRangeLowPct >= 0 ? "+" : ""}
+                  {f.predictedRangeLowPct.toFixed(2)}% | {f.predictedRangeHighPct >= 0 ? "+" : ""}
+                  {f.predictedRangeHighPct.toFixed(2)}%)
+                </p>
+
+                <div className="mt-3 pt-3 border-t border-v2-border">
+                  {f.trackRecord && !f.trackRecord.insufficientData && f.trackRecord.directionalAccuracyPct !== null ? (
+                    <p className="text-xs text-v2-muted leading-relaxed">
+                      {t.directionalAccuracy(f.trackRecord.directionalAccuracyPct, f.trackRecord.sampleSize)}
+                      {f.trackRecord.baselineAccuracyPct !== null && (
+                        <>
+                          <br />
+                          {t.vsBaseline(f.trackRecord.baselineAccuracyPct)}
+                        </>
+                      )}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-v2-muted">{t.notEnoughTrack}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
 
         <Card
+          icon={<IconBars className={ICON_CLASS} />}
           title={
             <span className="flex items-center gap-1.5">
               {t.scoreBreakdown}
@@ -567,37 +588,38 @@ export default async function DashboardPage() {
             </span>
           }
         >
-            <div className="space-y-3">
-              {factors.map((f) => {
-                const label = FACTOR_LABELS[f.key][locale];
-                const widthPct = f.contribution !== null ? Math.min(100, (Math.abs(f.contribution) / MAX_FACTOR_WEIGHT) * 100) : 0;
-                const barColor = f.contribution === null || f.contribution === 0 ? "bg-slate-300 dark:bg-slate-600" : f.contribution > 0 ? "bg-emerald-500" : "bg-red-500";
-                return (
-                  <div key={f.key}>
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="text-v2-muted">
-                        {label} ({f.weight.toFixed(0)}%)
-                      </span>
-                      <span className={`font-mono font-medium ${changeColorClass(f.contribution)}`}>
-                        {f.contribution !== null ? `${f.contribution > 0 ? "+" : ""}${f.contribution}` : "N/A"}
-                      </span>
-                    </div>
-                    <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-800">
-                      <div className={`h-1.5 rounded-full ${barColor}`} style={{ width: `${widthPct}%` }} />
-                    </div>
+          <div className="space-y-3">
+            {factors.map((f) => {
+              const label = FACTOR_LABELS[f.key][locale];
+              const widthPct = f.contribution !== null ? Math.min(100, (Math.abs(f.contribution) / MAX_FACTOR_WEIGHT) * 100) : 0;
+              const barColor = f.contribution === null || f.contribution === 0 ? "bg-slate-300 dark:bg-slate-600" : f.contribution > 0 ? "bg-emerald-500" : "bg-red-500";
+              return (
+                <div key={f.key}>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="text-v2-muted">
+                      {label} ({f.weight.toFixed(0)}%)
+                    </span>
+                    <span className={`font-mono font-medium ${changeColorClass(f.contribution)}`}>
+                      {f.contribution !== null ? `${f.contribution > 0 ? "+" : ""}${f.contribution}` : "N/A"}
+                    </span>
                   </div>
-                );
-              })}
-            </div>
-            <Link href="/analysis" className="inline-block mt-4 text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline">
-              {t.seeAll} &rarr;
-            </Link>
-          </Card>
+                  <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800">
+                    <div className={`h-2 rounded-full ${barColor} transition-[width] duration-500`} style={{ width: `${widthPct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <Link href="/analysis" className="inline-block mt-4 text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline">
+            {t.seeAll} &rarr;
+          </Link>
+        </Card>
       </div>
 
       {/* Row 4: Today's Events | Related Markets */}
       <div className="grid lg:grid-cols-2 gap-6">
         <Card
+          icon={<IconCalendar className={ICON_CLASS} />}
           title={
             <span className="flex items-center gap-1.5">
               {t.upcoming}
@@ -606,34 +628,38 @@ export default async function DashboardPage() {
           }
           padded={false}
         >
-            {upcoming.length === 0 ? (
-              <p className="text-sm text-v2-muted p-5">{t.noUpcoming}</p>
-            ) : (
-              <div className="max-h-[420px] overflow-y-auto">
-                {upcoming.map((e, i) => (
-                  <div key={i} className="flex items-start justify-between gap-3 px-5 py-3 border-b border-v2-border last:border-b-0">
-                    <div className="flex items-start gap-3 min-w-0">
-                      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-[10px] font-semibold text-v2-muted">
-                        {e.currency}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-v2-foreground">{e.eventName}</p>
-                        <p className="text-xs text-v2-muted">{formatEventDate(e.eventDate, locale)}</p>
-                        {(e.forecastValue !== null || e.previousValue !== null) && (
-                          <p className="text-xs text-v2-muted font-mono mt-0.5">
-                            {t.forecastLabel} {e.forecastValue ?? "--"} &middot; {t.previousLabel} {e.previousValue ?? "--"}
-                          </p>
-                        )}
-                      </div>
+          {upcoming.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
+              <IconCalendar className="h-6 w-6 text-v2-muted" />
+              <p className="text-sm text-v2-muted max-w-xs">{t.noUpcoming}</p>
+            </div>
+          ) : (
+            <div className="max-h-[420px] overflow-y-auto">
+              {upcoming.map((e, i) => (
+                <div key={i} className="flex items-start justify-between gap-3 px-5 py-3 border-b border-v2-border last:border-b-0 hover:bg-v2-bg/60 dark:hover:bg-slate-800/30">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-[10px] font-semibold text-v2-muted">
+                      {e.currency}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-v2-foreground">{e.eventName}</p>
+                      <p className="text-xs text-v2-muted">{formatEventDate(e.eventDate, locale)}</p>
+                      {(e.forecastValue !== null || e.previousValue !== null) && (
+                        <p className="text-xs text-v2-muted font-mono mt-0.5">
+                          {t.forecastLabel} {e.forecastValue ?? "--"} &middot; {t.previousLabel} {e.previousValue ?? "--"}
+                        </p>
+                      )}
                     </div>
-                    <BadgeChip label={e.impact} tone={impactTone(e.impact)} />
                   </div>
-                ))}
-              </div>
-            )}
-          </Card>
+                  <BadgeChip label={e.impact} tone={impactTone(e.impact)} />
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
 
         <Card
+          icon={<IconGlobe className={ICON_CLASS} />}
           title={
             <span className="flex items-center gap-1.5">
               {t.relatedMarkets}

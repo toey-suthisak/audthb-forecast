@@ -23,12 +23,16 @@ export default function Card({
 }) {
   return (
     <div
-      className={`rounded-xl border border-v2-border bg-v2-surface shadow-sm shadow-slate-900/5 dark:shadow-black/20 ${className}`}
+      className={`rounded-2xl border border-v2-border bg-v2-surface shadow-sm shadow-slate-900/5 dark:shadow-black/20 transition-colors hover:border-slate-300 dark:hover:border-slate-700 ${className}`}
     >
       {(title || action) && (
         <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-3 border-b border-v2-border">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-v2-foreground">
-            {icon && <span className="text-blue-600 dark:text-blue-400">{icon}</span>}
+            {icon && (
+              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
+                {icon}
+              </span>
+            )}
             {title}
           </h3>
           {action}

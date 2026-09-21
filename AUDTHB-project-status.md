@@ -894,3 +894,48 @@ all real MATCHED outcomes cross-checked against Supabase directly.
 `get_pending_forecast_outcomes` fix is the important one going
 forward -- without it, this exact stall recurs automatically once the
 due-but-unmatched backlog exceeds 100 again.
+
+## Dashboard tab: visual redesign pass (2026-09-21, same day)
+
+User asked to redesign the Dashboard tab's look with no specific
+reference this time ("ลองออกแบบหน้า dashboard ใหม่ทั้งหมด ให้ดูดีกว่านี้
+ใช้ frontend uiux design ช่วย") -- a pure visual-polish pass, not an
+information-architecture change (all 4 rows, all real data, all
+tooltips/filters from the prior rounds kept exactly as they were).
+
+New shared pieces (same hand-rolled-SVG, no-library convention as
+every other chart in this app):
+- `components/v2/Icon.tsx` -- 10 small generic line icons (exchange,
+  gauge, compass, candles, layers, pulse, target, bars, calendar,
+  globe), one per Dashboard card, rendered in a small tinted rounded
+  badge via `Card`'s existing `icon` prop.
+- `components/v2/ScoreGauge.tsx` -- replaces the FX Score card's flat
+  -100..+100 progress bar with a proper semi-circle speedometer arc
+  (red-to-emerald gradient, dash-offset reveal like `DonutGauge`, a
+  needle pointing at the real `coreFxScore` value). A signed bipolar
+  value doesn't fit a 0-100 donut honestly, hence a dedicated
+  component rather than reusing `DonutGauge`.
+- `components/v2/Card.tsx` -- rounded-xl to rounded-2xl, subtle
+  hover border transition, icon now sits in a tinted rounded badge
+  instead of bare colored text. Shared by all 6 tabs, so this lifts
+  the whole app's chrome consistently, not just Dashboard.
+
+`app/(dashboard)/page.tsx` changes (styling/markup only, zero data
+logic changed): every card header got its icon + kept its existing
+tooltip; AUD/THB's High/Low/Today stats and the chart's 1H/4H/swing/
+today stats became tinted `StatTile` chips instead of bare text
+columns; Technical Levels rows got small colored dots (red/gray/green)
+matching resistance/pivot/support; Forecast horizon boxes got a thin
+colored top accent bar (emerald/red/slate matching direction); Score
+Breakdown bars grew slightly (h-1.5 to h-2) with a width transition;
+Today's Events empty state became a centered icon+message instead of
+left-aligned text; a very subtle blurred gradient wash sits behind the
+top row for depth.
+
+Verified live at 1200px, 375px (mobile -- the gauge scales up nicely
+as a hero element at full width), and confirmed light-mode CSS
+variables resolve correctly via `getComputedStyle` (the Browser pane's
+screenshot still renders visually dark in light mode, a known
+rendering/capture quirk noted earlier this session, not a real bug --
+verified via computed styles, not pixels). `npx tsc --noEmit` and
+`npx next build` both pass clean.
