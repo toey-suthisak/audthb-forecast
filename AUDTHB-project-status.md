@@ -109,6 +109,35 @@ against real Supabase data: SMA(5)=23.7192, SMA(10)=23.7682, RSI(9)=55.7,
 trend/momentum narrative and chart overlay all rendering correctly before
 push.
 
+**Forecast merged into Technical Outlook (same day)**: user asked to take
+the existing Forecast panel (1H/4H/DAILY direction, predicted move %,
+price range, Track Record accuracy, caution notes -- previously its own
+section at the bottom of Hero's left/"Rate" column) and combine it with
+Technical Outlook, since the predicted price targets should be read
+against the real pivot support/resistance levels sitting right there. Cut
+the whole block out of `components/Hero.tsx` (and its now-unused
+`buildForecast`/`FORECAST_HORIZONS`/`FORECAST_VERSION`/
+`getEvaluationSummary` imports, `forecastDirectionColor` helper, and
+`referenceRate`/`forecasts`/`allNeutral`/`cautionNotes` locals -- nothing
+duplicated, moved wholesale) and rebuilt it inside
+`getTechnicalOutlook`/`TechnicalOutlook.tsx` instead, reusing the exact
+same `buildForecast()` rule, `getEvaluationSummary()` Track Record join,
+and `getEventRisk()`/`getConfidence()` caution-note logic -- no new
+prediction, no new judgment call. `formatHoursUntil` (previously a local
+Hero helper) moved to `lib/i18n.ts` since both files need it now.
+
+Added one genuine synthesis on top, not just a UI move: when the DAILY
+forecast has a real (non-NEUTRAL) directional call, its price target
+(range high for BULLISH, range low for BEARISH) is compared against the
+real pivot R1/S1 -- narrative states whether reaching that target would
+mean a real technical breakout/breakdown or just a move within the
+pivot's normal range. Verified live: today's Core FX Score sits inside
+the neutral band, so all three horizons correctly read NEUTRAL (with the
+existing `allNeutral` explainer) and the new cross-reference line
+correctly stays silent, since there's no directional target to compare
+yet -- confirms the conditional logic rather than proving the non-NEUTRAL
+branch, which will render once the score moves outside +/-15.
+
 **Daily Forecast now shows a number -- deliberately, before it clearly beats a
 baseline**: as of 2026-09-18, `forecast_runs` had 46 matched outcomes for
 `DAILY`/`1.0.0`, clearing Evaluation's `MIN_SAMPLE_SIZE` gate of 20. This file

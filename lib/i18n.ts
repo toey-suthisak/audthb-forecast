@@ -69,3 +69,13 @@ const FRESHNESS_FRIENDLY_TH: Record<string, string> = {
 export function freshnessLabel(status: string, locale: Locale): string {
   return (locale === "en" ? FRESHNESS_FRIENDLY_EN : FRESHNESS_FRIENDLY_TH)[status] ?? status;
 }
+
+// Shared by Hero's own event-risk banner and Technical Outlook's
+// forecast caution notes -- both format the same EventRisk.hoursUntil.
+export function formatHoursUntil(hours: number, locale: Locale): string {
+  if (hours < 1) {
+    const mins = Math.round(hours * 60);
+    return locale === "th" ? `${mins} นาที` : `${mins} min`;
+  }
+  return locale === "th" ? `${hours.toFixed(1)} ชม.` : `${hours.toFixed(1)}h`;
+}

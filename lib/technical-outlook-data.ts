@@ -1,8 +1,18 @@
 import "server-only";
 import { supabaseAdmin } from "@/lib/supabase-server";
-import type { Locale } from "@/lib/i18n";
+import { tLabel, formatHoursUntil, type Locale } from "@/lib/i18n";
 import type { DashboardData } from "@/lib/dashboard-data";
 import { getEconomicConsensus, type ConsensusEvent } from "@/lib/economic-consensus-data";
+import {
+  buildForecast,
+  FORECAST_HORIZONS,
+  FORECAST_VERSION,
+  type ForecastHorizon,
+  type ForecastDirection,
+} from "@/lib/forecast-data";
+import { getEvaluationSummary } from "@/lib/evaluation-data";
+import { getEventRisk } from "@/lib/event-calendar-data";
+import { getConfidence } from "@/lib/confidence-data";
 
 // =========================================================
 // SEPARATE FROM CORE FX SCORE / FORECAST ON PURPOSE.
@@ -82,6 +92,18 @@ const STR = {
     rsiNeutral: (n: number, value: number) => `${n}-day RSI is ${value.toFixed(0)} -- no extreme in either direction.`,
     limitedHistory: (days: number) =>
       `Trend/momentum readings above are based on only ${days} day(s) of price history so far -- they'll sharpen as more real data accumulates.`,
+    forecastEventRiskAround: (name: string, currency: string, hours: string) =>
+      `${name} (${currency}) in ${hours} -- expect volatility around that time.`,
+    forecastConfidenceCaution: (level: string) => `Confidence is currently ${level} -- see reasons above.`,
+    forecastCoverageCaution: (coverage: string) =>
+      `Model coverage is only ${coverage}/100 right now -- some signals are missing or delayed.`,
+    forecastMarketClosedCaution: "AUD/THB market is currently closed -- these ranges assume normal trading conditions.",
+    forecastTargetBeyondResistance: (target: number, r1: number) =>
+      `The DAILY forecast's upper target (${target.toFixed(4)}) sits beyond the pivot's first resistance (${r1.toFixed(4)}) -- reaching it would mean a real technical breakout, not just a quiet drift.`,
+    forecastTargetBeyondSupport: (target: number, s1: number) =>
+      `The DAILY forecast's lower target (${target.toFixed(4)}) sits beyond the pivot's first support (${s1.toFixed(4)}) -- reaching it would mean a real technical breakdown, not just a quiet drift.`,
+    forecastTargetWithinRange: (target: number, s1: number, r1: number) =>
+      `The DAILY forecast's target (${target.toFixed(4)}) stays inside the pivot's normal range (${s1.toFixed(4)} - ${r1.toFixed(4)}) -- a move within what's technically unremarkable.`,
   },
   th: {
     disclaimer:
@@ -141,6 +163,18 @@ const STR = {
     rsiNeutral: (n: number, value: number) => `RSI ${n} วัน อยู่ที่ ${value.toFixed(0)} -- ยังไม่สุดโต่งไปทางใด`,
     limitedHistory: (days: number) =>
       `ค่าแนวโน้ม/momentum ด้านบนคำนวณจากข้อมูลราคาจริงเพียง ${days} วันเท่านั้นในตอนนี้ -- ความแม่นยำจะดีขึ้นเมื่อมีข้อมูลสะสมมากขึ้น`,
+    forecastEventRiskAround: (name: string, currency: string, hours: string) =>
+      `${name} (${currency}) ในอีก ${hours} -- คาดว่าจะผันผวนช่วงนั้น`,
+    forecastConfidenceCaution: (level: string) => `ตอนนี้ความมั่นใจอยู่ที่ระดับ ${level} -- ดูเหตุผลด้านบน`,
+    forecastCoverageCaution: (coverage: string) =>
+      `ความครบถ้วนของข้อมูลตอนนี้มีแค่ ${coverage}/100 -- บางสัญญาณขาดหายหรือมาช้า`,
+    forecastMarketClosedCaution: "ตลาด AUD/THB ปิดอยู่ในขณะนี้ -- ช่วงราคานี้สมมุติสภาวะการซื้อขายปกติ",
+    forecastTargetBeyondResistance: (target: number, r1: number) =>
+      `เป้าหมายบนของพยากรณ์ DAILY (${target.toFixed(4)}) อยู่เลยแนวต้านแรก (${r1.toFixed(4)}) ไปแล้ว -- ถ้าไปถึงจริงจะถือเป็นการทะลุแนวต้านทางเทคนิค ไม่ใช่แค่ขยับเบาๆ`,
+    forecastTargetBeyondSupport: (target: number, s1: number) =>
+      `เป้าหมายล่างของพยากรณ์ DAILY (${target.toFixed(4)}) อยู่เลยแนวรับแรก (${s1.toFixed(4)}) ไปแล้ว -- ถ้าไปถึงจริงจะถือเป็นการหลุดแนวรับทางเทคนิค ไม่ใช่แค่ขยับเบาๆ`,
+    forecastTargetWithinRange: (target: number, s1: number, r1: number) =>
+      `เป้าหมายของพยากรณ์ DAILY (${target.toFixed(4)}) ยังอยู่ในกรอบปกติของ Pivot (${s1.toFixed(4)} - ${r1.toFixed(4)}) -- เป็นการเคลื่อนไหวที่ยังไม่โดดเด่นทางเทคนิค`,
   },
 } as const;
 
@@ -159,6 +193,22 @@ export type PivotLevels = {
 
 export type PricePoint = { date: string; close: number; smaShort: number | null };
 
+export type ForecastEntry = {
+  horizon: ForecastHorizon;
+  direction: ForecastDirection;
+  predictedMovePct: number;
+  predictedRangeLowPct: number;
+  predictedRangeHighPct: number;
+  priceRange: { low: number; high: number } | null;
+  trackRecord: {
+    sampleSize: number;
+    minSampleSize: number;
+    insufficientData: boolean;
+    directionalAccuracyPct: number | null;
+    baselineAccuracyPct: number | null;
+  } | null;
+};
+
 export type TechnicalOutlook = {
   available: boolean;
   disclaimer: string;
@@ -175,6 +225,9 @@ export type TechnicalOutlook = {
   rsiPeriod: number | null;
   rsiValue: number | null;
   narrative: string[];
+  forecasts: ForecastEntry[];
+  forecastAllNeutral: boolean;
+  forecastCautionNotes: string[];
   actionBias: {
     direction: "POSTFUND" | "PREFUND" | "NEUTRAL";
     label: string;
@@ -298,6 +351,9 @@ export async function getTechnicalOutlook(
     rsiPeriod: null,
     rsiValue: null,
     narrative: [],
+    forecasts: [],
+    forecastAllNeutral: false,
+    forecastCautionNotes: [],
     actionBias: { direction: "NEUTRAL", label: t.neutralAction, note: t.actionNote(t.neutralAction) },
     error,
   });
@@ -412,13 +468,100 @@ export async function getTechnicalOutlook(
   // data, just reused in this panel's narrative too. Only events with an
   // actual forecast (skips speeches/holidays) and no actual value yet
   // (already-released numbers belong in the past, not an "upcoming" line).
-  const consensus = await getEconomicConsensus();
+  //
+  // Fetched alongside eventRisk/confidence/evaluation -- all needed below
+  // to fold the app's existing Forecast panel (previously its own
+  // section in Hero.tsx) into this one, per the user's request to merge
+  // it with the technical levels it should be read against.
+  const [consensus, eventRisk, confidence, evaluation] = await Promise.all([
+    getEconomicConsensus(),
+    getEventRisk(),
+    getConfidence(dashboard, locale),
+    getEvaluationSummary(),
+  ]);
   const upcoming = consensus.events
     .filter((e) => e.impact === "HIGH" && e.forecastValue !== null && e.actualValue === null)
     .slice(0, 2);
 
   for (const event of upcoming) {
     narrative.push(formatUpcomingEvent(event, t));
+  }
+
+  // Forecast: the exact same buildForecast() rule already used
+  // everywhere else in the app (lib/forecast-data.ts), not a new
+  // prediction -- moved here (out of Hero.tsx) so each horizon's
+  // predicted price target sits next to the real pivot levels it should
+  // be read against.
+  const forecasts: ForecastEntry[] =
+    dashboard.coreFxScore !== null
+      ? FORECAST_HORIZONS.map((horizon) => {
+          const forecast = buildForecast(horizon, dashboard.coreFxScore!, currentRate);
+          const trackRecordGroup = evaluation.groups.find(
+            (g) => g.horizon === horizon && g.forecastVersion === FORECAST_VERSION,
+          );
+          return {
+            horizon,
+            direction: forecast.predictedDirection,
+            predictedMovePct: forecast.predictedMovePct,
+            predictedRangeLowPct: forecast.predictedRangeLowPct,
+            predictedRangeHighPct: forecast.predictedRangeHighPct,
+            priceRange:
+              currentRate !== null
+                ? {
+                    low: round(currentRate * (1 + forecast.predictedRangeLowPct / 100)),
+                    high: round(currentRate * (1 + forecast.predictedRangeHighPct / 100)),
+                  }
+                : null,
+            trackRecord: trackRecordGroup
+              ? {
+                  sampleSize: trackRecordGroup.sampleSize,
+                  minSampleSize: trackRecordGroup.minSampleSize,
+                  insufficientData: trackRecordGroup.insufficientData,
+                  directionalAccuracyPct:
+                    trackRecordGroup.model.directionalAccuracy !== null
+                      ? round(trackRecordGroup.model.directionalAccuracy * 100, 1)
+                      : null,
+                  baselineAccuracyPct:
+                    trackRecordGroup.baselineNoChange.directionalAccuracy !== null
+                      ? round(trackRecordGroup.baselineNoChange.directionalAccuracy * 100, 1)
+                      : null,
+                }
+              : null,
+          };
+        })
+      : [];
+
+  const forecastAllNeutral = forecasts.length > 0 && forecasts.every((f) => f.direction === "NEUTRAL");
+
+  // Same caution reasons Hero's Forecast section used to surface --
+  // pulled from signals already computed elsewhere on this page (Event
+  // Risk, Confidence, Model Coverage, market hours), never invented for
+  // this panel.
+  const forecastCautionNotes: string[] = [];
+  if (eventRisk.level !== "NONE" && eventRisk.event && eventRisk.hoursUntil !== null) {
+    forecastCautionNotes.push(
+      t.forecastEventRiskAround(eventRisk.event.eventName, eventRisk.event.currency, formatHoursUntil(eventRisk.hoursUntil, locale)),
+    );
+  }
+  if (confidence.level !== "HIGH") {
+    forecastCautionNotes.push(t.forecastConfidenceCaution(tLabel(confidence.level, locale)));
+  }
+  if (dashboard.availableCoreWeight < 100) {
+    forecastCautionNotes.push(t.forecastCoverageCaution(dashboard.availableCoreWeight.toFixed(1)));
+  }
+  if (dashboard.latestPriceFreshness.status === "MARKET_CLOSED") {
+    forecastCautionNotes.push(t.forecastMarketClosedCaution);
+  }
+
+  // The actual "merge": does the DAILY forecast's directional price
+  // target sit beyond a real pivot level, or within the normal range --
+  // genuine synthesis of two already-real numbers, not a new prediction.
+  const dailyForecast = forecasts.find((f) => f.horizon === "DAILY");
+  if (dailyForecast && dailyForecast.priceRange && dailyForecast.direction !== "NEUTRAL") {
+    const target = dailyForecast.direction === "BULLISH" ? dailyForecast.priceRange.high : dailyForecast.priceRange.low;
+    if (target >= pivots.r1) narrative.push(t.forecastTargetBeyondResistance(target, pivots.r1));
+    else if (target <= pivots.s1) narrative.push(t.forecastTargetBeyondSupport(target, pivots.s1));
+    else narrative.push(t.forecastTargetWithinRange(target, pivots.s1, pivots.r1));
   }
 
   // Same bias thresholds as coreBias elsewhere in this app (>=15 / <=-15),
@@ -472,6 +615,9 @@ export async function getTechnicalOutlook(
     rsiPeriod: rsiValue !== null ? rsiPeriod : null,
     rsiValue,
     narrative,
+    forecasts,
+    forecastAllNeutral,
+    forecastCautionNotes,
     actionBias: { direction, label, note: t.actionNote(label) },
     error: null,
   };

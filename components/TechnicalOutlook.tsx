@@ -1,7 +1,10 @@
-import type { TechnicalOutlook as TechnicalOutlookData, PricePoint } from "@/lib/technical-outlook-data";
+import type { TechnicalOutlook as TechnicalOutlookData, PricePoint, ForecastEntry } from "@/lib/technical-outlook-data";
+import type { ForecastDirection } from "@/lib/forecast-data";
 import Figure from "@/components/Figure";
 import StatusLight from "@/components/StatusLight";
-import type { Locale } from "@/lib/i18n";
+import StatusBadge from "@/components/StatusBadge";
+import InfoTip from "@/components/InfoTip";
+import { tLabel, type Locale } from "@/lib/i18n";
 
 const STR = {
   en: {
@@ -18,6 +21,17 @@ const STR = {
     momentum: (n: number) => `Momentum (RSI ${n})`,
     priceLegend: "Price",
     smaLegend: (n: number) => `SMA(${n})`,
+    forecastHeading: "Forecast",
+    forecastTooltip:
+      "Derived from today's Core FX Score using a fixed, uncalibrated formula per horizon -- it is not a statistically fitted prediction. Track Record below is the only honest measure of how well each one actually performs.",
+    forecastAllNeutral:
+      "All three read NEUTRAL because Core FX Score is inside the -15 to +15 neutral band -- every horizon uses the same directional call, only the predicted move size differs.",
+    forecastUnavailable: "Core FX Score is not available right now -- unable to calculate a forecast.",
+    forecastPriceRange: (low: string, high: string) => `Price range: ${low} to ${high}`,
+    forecastDirectionCorrect: (pct: string, n: number, basePct: string) =>
+      `Direction correct ${pct}% of last ${n} (baseline ${basePct}%)`,
+    forecastNotEnough: (extra: string) => `Not enough resolved forecasts yet to show accuracy${extra}.`,
+    forecastCaution: "Caution",
   },
   th: {
     title: "มุมมองทางเทคนิค",
@@ -33,8 +47,25 @@ const STR = {
     momentum: (n: number) => `Momentum (RSI ${n} วัน)`,
     priceLegend: "ราคา",
     smaLegend: (n: number) => `SMA(${n})`,
+    forecastHeading: "พยากรณ์",
+    forecastTooltip:
+      "คำนวณจาก Core FX Score ของวันนี้ด้วยสูตรคงที่ที่ยังไม่ได้ปรับเทียบในแต่ละกรอบเวลา -- ไม่ใช่การพยากรณ์ที่ผ่านการทดสอบทางสถิติ Track Record ด้านล่างคือตัวชี้วัดความแม่นยำจริงเพียงอย่างเดียวที่เชื่อถือได้",
+    forecastAllNeutral:
+      "ทั้งสามกรอบเวลาอ่านได้ NEUTRAL เพราะ Core FX Score อยู่ในช่วงเป็นกลาง -15 ถึง +15 -- ทุกกรอบเวลาใช้เกณฑ์ทิศทางเดียวกัน ต่างกันแค่ขนาดการเคลื่อนไหวที่คาดการณ์",
+    forecastUnavailable: "ไม่มี Core FX Score ในขณะนี้ -- ไม่สามารถคำนวณพยากรณ์ได้",
+    forecastPriceRange: (low: string, high: string) => `ช่วงราคา: ${low} ถึง ${high}`,
+    forecastDirectionCorrect: (pct: string, n: number, basePct: string) =>
+      `ทายทิศทางถูก ${pct}% จาก ${n} ครั้งล่าสุด (baseline ${basePct}%)`,
+    forecastNotEnough: (extra: string) => `ยังมีข้อมูลไม่พอที่จะแสดงความแม่นยำ${extra}`,
+    forecastCaution: "ข้อควรระวัง",
   },
 } as const;
+
+function forecastDirectionColor(direction: ForecastDirection) {
+  if (direction === "BULLISH") return "text-emerald-700 dark:text-emerald-400";
+  if (direction === "BEARISH") return "text-red-700 dark:text-red-400";
+  return "text-stone-700 dark:text-stone-300";
+}
 
 function biasColor(direction: TechnicalOutlookData["actionBias"]["direction"]) {
   if (direction === "POSTFUND") return "text-emerald-700 dark:text-emerald-400";
@@ -193,6 +224,95 @@ function ChartLegend({ smaShortPeriod, locale }: { smaShortPeriod: number | null
   );
 }
 
+function ForecastPanel({
+  outlook,
+  locale,
+}: {
+  outlook: TechnicalOutlookData;
+  locale: Locale;
+}) {
+  const t = STR[locale];
+
+  return (
+    <div className="mt-4 pt-4 border-t border-stone-200 dark:border-stone-800">
+      <p className="text-xs font-medium text-stone-600 dark:text-stone-400 uppercase tracking-widest inline-flex items-center">
+        {t.forecastHeading}
+        <InfoTip text={t.forecastTooltip} />
+      </p>
+
+      {outlook.forecasts.length > 0 ? (
+        <>
+          {outlook.forecastAllNeutral && (
+            <p className="text-xs text-stone-600 dark:text-stone-400 mt-1.5 leading-relaxed">
+              {t.forecastAllNeutral}
+            </p>
+          )}
+
+          <div className="mt-2 divide-y divide-stone-200 dark:divide-stone-800">
+            {outlook.forecasts.map((forecast: ForecastEntry) => (
+              <div key={forecast.horizon} className="py-2.5 first:pt-0 last:pb-0">
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <span className="text-xs font-semibold text-stone-500 dark:text-stone-500 shrink-0">
+                    {forecast.horizon}
+                  </span>
+                  <p className={`text-lg font-semibold ${forecastDirectionColor(forecast.direction)}`}>
+                    {tLabel(forecast.direction, locale)}
+                  </p>
+                  <StatusBadge label={tLabel("Uncalibrated", locale)} tone="amber" />
+                  <span className="text-xs text-stone-600 dark:text-stone-400 ml-auto">
+                    {forecast.predictedMovePct >= 0 ? "+" : ""}
+                    {forecast.predictedMovePct.toFixed(2)}% ({forecast.predictedRangeLowPct.toFixed(2)}% to{" "}
+                    {forecast.predictedRangeHighPct.toFixed(2)}%)
+                  </span>
+                </div>
+
+                {forecast.priceRange && (
+                  <p className="text-xs text-stone-500 dark:text-stone-500 mt-0.5">
+                    {t.forecastPriceRange(forecast.priceRange.low.toFixed(4), forecast.priceRange.high.toFixed(4))}
+                  </p>
+                )}
+
+                <p className="text-xs text-stone-600 dark:text-stone-400 mt-1">
+                  {forecast.trackRecord && !forecast.trackRecord.insufficientData ? (
+                    t.forecastDirectionCorrect(
+                      (forecast.trackRecord.directionalAccuracyPct ?? 0).toFixed(1),
+                      forecast.trackRecord.sampleSize,
+                      (forecast.trackRecord.baselineAccuracyPct ?? 0).toFixed(1),
+                    )
+                  ) : (
+                    t.forecastNotEnough(
+                      forecast.trackRecord
+                        ? ` (${forecast.trackRecord.sampleSize}/${forecast.trackRecord.minSampleSize})`
+                        : "",
+                    )
+                  )}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {outlook.forecastCautionNotes.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-stone-200 dark:border-stone-800">
+              <p className="text-xs font-medium text-amber-700 dark:text-amber-400 uppercase tracking-widest">
+                {t.forecastCaution}
+              </p>
+              <ul className="mt-1 space-y-1">
+                {outlook.forecastCautionNotes.map((note, i) => (
+                  <li key={i} className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed">
+                    {note}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </>
+      ) : (
+        <p className="text-sm text-stone-600 dark:text-stone-400 mt-1">{t.forecastUnavailable}</p>
+      )}
+    </div>
+  );
+}
+
 export default function TechnicalOutlook({
   outlook,
   locale,
@@ -283,6 +403,8 @@ export default function TechnicalOutlook({
               <li key={i}>{line}</li>
             ))}
           </ul>
+
+          <ForecastPanel outlook={outlook} locale={locale} />
 
           <div className="mt-4 pt-4 border-t border-stone-200 dark:border-stone-800">
             <p className="text-xs text-stone-600 dark:text-stone-400">{t.actionBias}</p>
