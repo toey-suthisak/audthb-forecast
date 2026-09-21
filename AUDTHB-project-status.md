@@ -225,6 +225,24 @@ these weights.
 
 ## Known open items
 
+- **Check `event_calendar` vs. `ff_weekly_calendar` naming again around
+  2026-09-29 (RBA Board Meeting Decision), and again for BOT MPC/FOMC
+  around 2026-10-28, AU CPI 2026-09-30, US CPI 2026-10-14.** The
+  Employment Change rename (2026-09-21, see above) was only checkable
+  because that event fell inside ForexFactory's currently-fetched
+  window (`ff_weekly_calendar` only ever holds the *current* week,
+  refreshed daily -- there's no stored history of future weeks to
+  check against ahead of time). Confirmed as of 2026-09-21:
+  ForexFactory has **zero THB coverage at all** (checked
+  `ff_weekly_calendar` and all-time `economic_consensus`), so BOT MPC
+  events can never have a naming clash to fix -- skip those. RBA/FOMC/
+  BOE/BOJ are the ones that could still mismatch; ForexFactory
+  typically splits a rate decision into multiple line items (e.g.
+  "Cash Rate" + "RBA Rate Statement" rather than one combined
+  "Decision" row), which `event_calendar`'s single-row-per-meeting
+  naming doesn't match today -- don't guess the exact rename before
+  that week's real data is fetchable; verify live the same way the
+  Employment Change fix was verified.
 - Track Record (workflow E) needs 20 matched outcomes per horizon/version
   group before it reports real accuracy numbers instead of "insufficient
   data" -- this fills in automatically over the following days, no code
