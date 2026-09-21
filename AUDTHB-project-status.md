@@ -842,3 +842,55 @@ direct Supabase query for today; no caution popup renders right now
 since no alert currently qualifies for the 24h window (correct,
 verified via DOM inspection, not a missing feature). `npx tsc --noEmit`
 and `npx next build` both pass clean.
+
+## Fixed: Performance tab's "Recent Forecast History" stuck on 2026-09-19 (2026-09-21, same day)
+
+User noticed the table stopped advancing past 19/09, 06:00. Root
+caused via direct Supabase queries (`cron.job_run_details`,
+`forecast_runs`, `forecast_outcomes`) -- two independent, compounding
+bugs, both real, neither previously caught:
+
+1. **`/api/forecast-outcome` silently stalled since ~2026-09-20 10:35
+   UTC**, while its hourly cron (`update-forecast-outcome-hourly`,
+   `25 * * * *`) kept "succeeding" every hour (the cron only checks
+   that the HTTP call completed, not what it did). The route fetched
+   the oldest `BATCH_LIMIT` (100) due `forecast_runs` first (`ORDER BY
+   target_time ASC LIMIT 100`), *then* filtered out ones that already
+   had an outcome. Once the backlog of due forecast_runs passed 100 and
+   the oldest 100 were all already matched (confirmed: oldest 100 were
+   100/100 already matched, newest of that page = 2026-09-19 07:00
+   UTC), every hourly run kept re-fetching that same exhausted page,
+   found nothing pending in it, and did nothing -- 79 real,
+   newer forecast_runs (2026-09-19 07:00 through 2026-09-21) sat
+   completely unprocessed the whole time. Fixed with a new SQL function,
+   `get_pending_forecast_outcomes(p_before, p_limit)`
+   (`supabase/migrations/20260921_pending_forecast_outcomes_function.sql`)
+   that excludes already-matched forecast_runs with `NOT EXISTS`
+   *inside* the query, before `LIMIT` -- so a full page can never be
+   "already handled." `app/api/forecast-outcome/route.ts` now calls
+   this RPC instead of select-then-client-filter. Ran it once by hand
+   against the live DB to clear the backlog: `{"checked":79,"matched":79,
+   "missing":0,"skipped":0}` -- confirmed via SQL that all 323 due
+   forecast_runs now have outcomes (323/323), latest DAILY/1.0.1 match
+   now at 2026-09-21 07:00 UTC.
+2. **`lib/forecast-history-data.ts` was not actually ordering by recency
+   at all.** It called `.order("target_time", { ascending: false,
+   referencedTable: "forecast_runs" })` -- but `referencedTable` only
+   reorders rows *within* an embedded resource, which is meaningless
+   for a to-one `!inner` join; it does nothing to the outer
+   `forecast_outcomes` query's row order. So `.limit(12)` was applied
+   to an effectively arbitrary order, and it happened to keep landing
+   on rows around 2026-09-18/19 even after bug #1 was fixed and current
+   data existed. Fixed by ordering on `forecast_outcomes`'s own
+   `target_time` column instead (duplicated onto that table at insert
+   time in `route.ts`, confirmed present in the schema) --
+   `.order("target_time", { ascending: false })` with no
+   `referencedTable`.
+
+Verified live: after both fixes, "Recent Forecast History" (DAILY)
+shows real, current rows from 21/09 01:00 through 21/09 14:00 (today),
+all real MATCHED outcomes cross-checked against Supabase directly.
+`npx tsc --noEmit` and `npx next build` both pass clean. The
+`get_pending_forecast_outcomes` fix is the important one going
+forward -- without it, this exact stall recurs automatically once the
+due-but-unmatched backlog exceeds 100 again.

@@ -88,29 +88,25 @@ export async function GET(request: Request) {
   try {
     const now = Date.now();
 
-    const { data: dueForecasts, error: dueError } = await supabaseAdmin
-      .from("forecast_runs")
-      .select("id, target_time, reference_rate, predicted_move_pct")
-      .lte("target_time", new Date(now).toISOString())
-      .order("target_time", { ascending: true })
-      .limit(BATCH_LIMIT);
+    // Excludes already-matched forecast_runs *inside the SQL query*
+    // (see get_pending_forecast_outcomes migration, 2026-09-21) --
+    // the previous version fetched the oldest BATCH_LIMIT due rows
+    // first and filtered out already-matched ones after, so once the
+    // backlog of due forecast_runs exceeded BATCH_LIMIT and the oldest
+    // page was fully matched, every run kept re-fetching that same
+    // exhausted page and silently did nothing, never reaching newer
+    // unmatched forecasts.
+    const { data: pendingForecasts, error: dueError } = await supabaseAdmin.rpc(
+      "get_pending_forecast_outcomes",
+      { p_before: new Date(now).toISOString(), p_limit: BATCH_LIMIT },
+    );
 
-    if (dueError) throw new Error(`forecast_runs query error: ${dueError.message}`);
+    if (dueError) throw new Error(`get_pending_forecast_outcomes error: ${dueError.message}`);
 
-    const due = (dueForecasts ?? []) as PendingForecast[];
-    if (due.length === 0) {
+    const pending = (pendingForecasts ?? []) as PendingForecast[];
+    if (pending.length === 0) {
       return NextResponse.json({ checked: 0, matched: 0, missing: 0, skipped: 0 });
     }
-
-    const { data: existingOutcomes, error: outcomeError } = await supabaseAdmin
-      .from("forecast_outcomes")
-      .select("forecast_run_id")
-      .in("forecast_run_id", due.map((f) => f.id));
-
-    if (outcomeError) throw new Error(`forecast_outcomes query error: ${outcomeError.message}`);
-
-    const alreadyMatched = new Set((existingOutcomes ?? []).map((o) => o.forecast_run_id as number));
-    const pending = due.filter((f) => !alreadyMatched.has(f.id));
 
     let matched = 0;
     let missing = 0;

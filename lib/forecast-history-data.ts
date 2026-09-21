@@ -41,6 +41,16 @@ export async function getForecastHistory(
   horizon: ForecastHorizon,
   limit = 12,
 ): Promise<{ rows: ForecastHistoryRow[]; error: string | null }> {
+  // Order by forecast_outcomes' OWN target_time column (a duplicate of
+  // forecast_runs.target_time, written at insert time -- see
+  // app/api/forecast-outcome/route.ts), not `{ referencedTable:
+  // "forecast_runs" }`. That option only reorders rows *within* an
+  // embedded resource; it does nothing to the outer query's row order
+  // for a to-one join like this, so the previous version was
+  // effectively unordered and .limit(12) returned whatever 12 rows
+  // Postgres's default scan order happened to produce -- not the 12
+  // most recent (this is why "Recent Forecast History" looked stuck
+  // on 2026-09-19 dates even once the underlying data was current).
   const { data, error } = await supabaseAdmin
     .from("forecast_outcomes")
     .select(
@@ -50,7 +60,7 @@ export async function getForecastHistory(
     .eq("status", "MATCHED")
     .eq("forecast_runs.horizon", horizon)
     .eq("forecast_runs.forecast_version", FORECAST_VERSION)
-    .order("target_time", { ascending: false, referencedTable: "forecast_runs" })
+    .order("target_time", { ascending: false })
     .limit(limit);
 
   if (error) {
