@@ -65,6 +65,23 @@ const STR = {
       `Upcoming: ${currency} ${event} -- forecast ${forecast}`,
     leanBullish: "(leans bullish for the currency)",
     leanBearish: "(leans bearish for the currency)",
+    smaLabel: (n: number) => `SMA(${n})`,
+    rsiLabel: (n: number) => `RSI(${n})`,
+    trendAboveSma: (n: number, value: number) =>
+      `Price is trading above its ${n}-day average (${value.toFixed(4)}) -- short-term trend is up.`,
+    trendBelowSma: (n: number, value: number) =>
+      `Price is trading below its ${n}-day average (${value.toFixed(4)}) -- short-term trend is down.`,
+    trendCrossUp: (short: number, long: number) =>
+      `The ${short}-day average is above the ${long}-day average -- short-term trend is stronger than the longer one.`,
+    trendCrossDown: (short: number, long: number) =>
+      `The ${short}-day average is below the ${long}-day average -- short-term trend is weaker than the longer one.`,
+    rsiOverbought: (n: number, value: number) =>
+      `${n}-day RSI is ${value.toFixed(0)} (overbought territory) -- the recent move has been unusually one-sided.`,
+    rsiOversold: (n: number, value: number) =>
+      `${n}-day RSI is ${value.toFixed(0)} (oversold territory) -- the recent move has been unusually one-sided.`,
+    rsiNeutral: (n: number, value: number) => `${n}-day RSI is ${value.toFixed(0)} -- no extreme in either direction.`,
+    limitedHistory: (days: number) =>
+      `Trend/momentum readings above are based on only ${days} day(s) of price history so far -- they'll sharpen as more real data accumulates.`,
   },
   th: {
     disclaimer:
@@ -107,6 +124,23 @@ const STR = {
       `ข่าวที่จะประกาศเร็วๆ นี้: ${currency} ${event} -- คาดการณ์ ${forecast}`,
     leanBullish: "(เอนบวกต่อค่าเงินนั้น)",
     leanBearish: "(เอนลบต่อค่าเงินนั้น)",
+    smaLabel: (n: number) => `เส้นค่าเฉลี่ย ${n} วัน`,
+    rsiLabel: (n: number) => `RSI ${n} วัน`,
+    trendAboveSma: (n: number, value: number) =>
+      `ราคาอยู่เหนือเส้นค่าเฉลี่ย ${n} วัน (${value.toFixed(4)}) -- แนวโน้มระยะสั้นเป็นขาขึ้น`,
+    trendBelowSma: (n: number, value: number) =>
+      `ราคาอยู่ใต้เส้นค่าเฉลี่ย ${n} วัน (${value.toFixed(4)}) -- แนวโน้มระยะสั้นเป็นขาลง`,
+    trendCrossUp: (short: number, long: number) =>
+      `เส้นค่าเฉลี่ย ${short} วัน อยู่เหนือเส้นค่าเฉลี่ย ${long} วัน -- แนวโน้มระยะสั้นแข็งแรงกว่าระยะยาว`,
+    trendCrossDown: (short: number, long: number) =>
+      `เส้นค่าเฉลี่ย ${short} วัน อยู่ใต้เส้นค่าเฉลี่ย ${long} วัน -- แนวโน้มระยะสั้นอ่อนกว่าระยะยาว`,
+    rsiOverbought: (n: number, value: number) =>
+      `RSI ${n} วัน อยู่ที่ ${value.toFixed(0)} (โซน overbought) -- การเคลื่อนไหวล่าสุดเอนไปทางเดียวค่อนข้างมาก`,
+    rsiOversold: (n: number, value: number) =>
+      `RSI ${n} วัน อยู่ที่ ${value.toFixed(0)} (โซน oversold) -- การเคลื่อนไหวล่าสุดเอนไปทางเดียวค่อนข้างมาก`,
+    rsiNeutral: (n: number, value: number) => `RSI ${n} วัน อยู่ที่ ${value.toFixed(0)} -- ยังไม่สุดโต่งไปทางใด`,
+    limitedHistory: (days: number) =>
+      `ค่าแนวโน้ม/momentum ด้านบนคำนวณจากข้อมูลราคาจริงเพียง ${days} วันเท่านั้นในตอนนี้ -- ความแม่นยำจะดีขึ้นเมื่อมีข้อมูลสะสมมากขึ้น`,
   },
 } as const;
 
@@ -123,7 +157,7 @@ export type PivotLevels = {
   basedOnDate: string;
 };
 
-export type PricePoint = { date: string; close: number };
+export type PricePoint = { date: string; close: number; smaShort: number | null };
 
 export type TechnicalOutlook = {
   available: boolean;
@@ -134,6 +168,12 @@ export type TechnicalOutlook = {
   swingLow: number | null;
   swingLookbackDays: number;
   priceSeries: PricePoint[];
+  smaShortPeriod: number | null;
+  smaShortValue: number | null;
+  smaLongPeriod: number | null;
+  smaLongValue: number | null;
+  rsiPeriod: number | null;
+  rsiValue: number | null;
   narrative: string[];
   actionBias: {
     direction: "POSTFUND" | "PREFUND" | "NEUTRAL";
@@ -143,40 +183,58 @@ export type TechnicalOutlook = {
   error: string | null;
 };
 
-type PriceRow = { rate: number | string; market_timestamp: string };
+type DailyBarRow = { bar_date: string; open: number | string; high: number | string; low: number | string; close: number | string };
 type DailyBar = { date: string; open: number; high: number; low: number; close: number };
 
-function bangkokDateKey(isoTimestamp: string): string {
-  const bangkokOffset = 7 * 60 * 60 * 1000;
-  const bangkokTime = new Date(new Date(isoTimestamp).getTime() + bangkokOffset);
-  return `${bangkokTime.getUTCFullYear()}-${String(bangkokTime.getUTCMonth() + 1).padStart(2, "0")}-${String(bangkokTime.getUTCDate()).padStart(2, "0")}`;
+function normalizeBars(rows: DailyBarRow[]): DailyBar[] {
+  return rows
+    .map((row) => ({
+      date: row.bar_date,
+      open: Number(row.open),
+      high: Number(row.high),
+      low: Number(row.low),
+      close: Number(row.close),
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-function buildDailyBars(rows: PriceRow[]): DailyBar[] {
-  const byDay = new Map<string, PriceRow[]>();
-  for (const row of rows) {
-    const key = bangkokDateKey(row.market_timestamp);
-    const list = byDay.get(key) ?? [];
-    list.push(row);
-    byDay.set(key, list);
-  }
+// Real classic periods (5/20/14) capped to however many completed days of
+// real price history actually exist -- this project only started
+// collecting AUD/THB on 2026-09-11, so early on these compute over
+// fewer real days rather than either faking padding or refusing to show
+// anything. The label always states the real period used, and once
+// enough history accumulates these naturally become true SMA(20)/RSI(14).
+const MAX_SMA_SHORT_PERIOD = 5;
+const MAX_SMA_LONG_PERIOD = 20;
+const MAX_RSI_PERIOD = 14;
+const MIN_BARS_FOR_TREND = 3;
 
-  const bars: DailyBar[] = [];
-  for (const [date, dayRows] of byDay) {
-    const sorted = [...dayRows].sort(
-      (a, b) => new Date(a.market_timestamp).getTime() - new Date(b.market_timestamp).getTime(),
-    );
-    const rates = sorted.map((r) => Number(r.rate));
-    bars.push({
-      date,
-      open: rates[0],
-      close: rates[rates.length - 1],
-      high: Math.max(...rates),
-      low: Math.min(...rates),
-    });
-  }
+function simpleMovingAverage(bars: DailyBar[], period: number): number {
+  const slice = bars.slice(-period);
+  return slice.reduce((sum, b) => sum + b.close, 0) / slice.length;
+}
 
-  return bars.sort((a, b) => a.date.localeCompare(b.date));
+function rollingSma(bars: DailyBar[], period: number): (number | null)[] {
+  return bars.map((_, i) => {
+    if (i + 1 < period) return null;
+    return simpleMovingAverage(bars.slice(0, i + 1), period);
+  });
+}
+
+function relativeStrengthIndex(bars: DailyBar[], period: number): number {
+  const closes = bars.slice(-(period + 1)).map((b) => b.close);
+  let gains = 0;
+  let losses = 0;
+  for (let i = 1; i < closes.length; i++) {
+    const diff = closes[i] - closes[i - 1];
+    if (diff > 0) gains += diff;
+    else losses += -diff;
+  }
+  const avgGain = gains / period;
+  const avgLoss = losses / period;
+  if (avgLoss === 0) return 100;
+  const rs = avgGain / avgLoss;
+  return 100 - 100 / (1 + rs);
 }
 
 function classicPivots(bar: DailyBar): PivotLevels {
@@ -208,11 +266,15 @@ function formatUpcomingEvent(event: ConsensusEvent, t: (typeof STR)[Locale]): st
   return base;
 }
 
-// Supabase/PostgREST caps a query at 1000 rows regardless of .limit(),
-// and AUD/THB runs ~140 rows/day -- 7 days safely fits under that cap
-// with room as volume grows; a longer nominal lookback would just get
-// silently truncated again (see the fetch below).
 const SWING_LOOKBACK_DAYS = 7;
+
+// How far back to ask the DB for -- real history only goes back to
+// 2026-09-11 (when AUD/THB ingestion started), so this is a ceiling, not
+// a promise; get_daily_price_bars just returns however many real days
+// actually exist within it, aggregated server-side (see the migration),
+// which is what lets this safely ask for much more than the old
+// 1000-raw-row cap ever allowed.
+const MAX_LOOKBACK_DAYS = 60;
 
 export async function getTechnicalOutlook(
   locale: Locale,
@@ -229,29 +291,32 @@ export async function getTechnicalOutlook(
     swingLow: null,
     swingLookbackDays: SWING_LOOKBACK_DAYS,
     priceSeries: [],
+    smaShortPeriod: null,
+    smaShortValue: null,
+    smaLongPeriod: null,
+    smaLongValue: null,
+    rsiPeriod: null,
+    rsiValue: null,
     narrative: [],
     actionBias: { direction: "NEUTRAL", label: t.neutralAction, note: t.actionNote(t.neutralAction) },
     error,
   });
 
-  const lookbackStart = new Date(Date.now() - (SWING_LOOKBACK_DAYS + 3) * 24 * 60 * 60 * 1000);
+  const lookbackStart = new Date(Date.now() - MAX_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
 
-  // Ordered descending with an explicit limit, not ascending with the
-  // implicit default -- Supabase/PostgREST caps unlimited queries at
-  // 1000 rows, and AUD/THB alone runs ~140/day, so an ascending fetch
-  // silently truncated before reaching today's rows (found live: the
-  // pivot was computing off day-3-ago data with no error surfaced).
-  const { data, error } = await supabaseAdmin
-    .from("market_prices")
-    .select("rate, market_timestamp")
-    .eq("symbol", "AUD/THB")
-    .gte("market_timestamp", lookbackStart.toISOString())
-    .order("market_timestamp", { ascending: false })
-    .limit(3000);
+  // Aggregated server-side (one row per real calendar day) -- see
+  // supabase/migrations/20260921_daily_price_bars_function.sql. Replaces
+  // the old raw-tick fetch, which silently truncated at Supabase's
+  // 1000-row cap (AUD/THB runs ~140 ticks/day) before it ever reached
+  // more than ~7 days back.
+  const { data, error } = await supabaseAdmin.rpc("get_daily_price_bars", {
+    p_symbol: "AUD/THB",
+    p_since: lookbackStart.toISOString(),
+  });
 
   if (error) return empty(`Technical outlook DB error: ${error.message}`);
 
-  const bars = buildDailyBars((data ?? []) as PriceRow[]);
+  const bars = normalizeBars((data ?? []) as DailyBarRow[]);
   if (bars.length < 2) return empty(t.notEnoughData);
 
   // Pivots use the most recently *completed* day -- drop today's bar
@@ -266,6 +331,19 @@ export async function getTechnicalOutlook(
 
   const currentRate =
     dashboard.directRate ?? (dashboard.latestPrice ? Number(dashboard.latestPrice.rate) : null);
+
+  // Real classic periods capped to however many completed real days
+  // exist -- see the comment on MAX_SMA_SHORT_PERIOD etc. above.
+  const smaShortPeriod = Math.min(MAX_SMA_SHORT_PERIOD, completedBars.length);
+  const smaLongPeriod = Math.min(MAX_SMA_LONG_PERIOD, completedBars.length);
+  const hasTrend = completedBars.length >= MIN_BARS_FOR_TREND;
+
+  const smaShortValue = hasTrend ? round(simpleMovingAverage(completedBars, smaShortPeriod)) : null;
+  const smaLongValue =
+    hasTrend && smaLongPeriod > smaShortPeriod ? round(simpleMovingAverage(completedBars, smaLongPeriod)) : null;
+
+  const rsiPeriod = Math.min(MAX_RSI_PERIOD, completedBars.length - 1);
+  const rsiValue = rsiPeriod >= 2 ? round(relativeStrengthIndex(completedBars, rsiPeriod), 1) : null;
 
   const narrative: string[] = [];
   if (dashboard.coreFxScore !== null) {
@@ -295,6 +373,37 @@ export async function getTechnicalOutlook(
     if (currentRate > pivots.r1) narrative.push(t.aboveR1(pivots.r1, pivots.r2));
     else if (currentRate < pivots.s1) narrative.push(t.belowS1(pivots.s1, pivots.s2));
     else narrative.push(t.betweenS1R1(pivots.s1, pivots.r1));
+  }
+
+  // Trend (SMA) and momentum (RSI), both computed from this project's own
+  // real daily bars above -- periods shrink automatically when less than
+  // the classic 5/20/14 days of real history exist yet (see the comment
+  // on MAX_SMA_SHORT_PERIOD).
+  if (smaShortValue !== null && currentRate !== null) {
+    narrative.push(
+      currentRate >= smaShortValue
+        ? t.trendAboveSma(smaShortPeriod, smaShortValue)
+        : t.trendBelowSma(smaShortPeriod, smaShortValue),
+    );
+  }
+  if (smaShortValue !== null && smaLongValue !== null) {
+    narrative.push(
+      smaShortValue >= smaLongValue
+        ? t.trendCrossUp(smaShortPeriod, smaLongPeriod)
+        : t.trendCrossDown(smaShortPeriod, smaLongPeriod),
+    );
+  }
+  if (rsiValue !== null) {
+    narrative.push(
+      rsiValue >= 70
+        ? t.rsiOverbought(rsiPeriod, rsiValue)
+        : rsiValue <= 30
+          ? t.rsiOversold(rsiPeriod, rsiValue)
+          : t.rsiNeutral(rsiPeriod, rsiValue),
+    );
+  }
+  if (hasTrend && completedBars.length < MAX_SMA_LONG_PERIOD) {
+    narrative.push(t.limitedHistory(completedBars.length));
   }
 
   // Real forecast/previous values, not invented ones -- economic_consensus
@@ -328,8 +437,15 @@ export async function getTechnicalOutlook(
 
   // Daily closes for the chart, including today's still-filling-in bar
   // so the line reaches the current price -- same bars already computed
-  // above for the pivot/swing math, not a second query.
-  const priceSeries: PricePoint[] = bars.map((bar) => ({ date: bar.date, close: round(bar.close) }));
+  // above for the pivot/swing math, not a second query. The rolling SMA
+  // is computed over the same real bars (not padded), so it only starts
+  // drawing once enough trailing history exists for that point in time.
+  const rollingSmaShort = rollingSma(bars, smaShortPeriod);
+  const priceSeries: PricePoint[] = bars.map((bar, i) => ({
+    date: bar.date,
+    close: round(bar.close),
+    smaShort: rollingSmaShort[i] !== null ? round(rollingSmaShort[i] as number) : null,
+  }));
 
   return {
     available: true,
@@ -349,6 +465,12 @@ export async function getTechnicalOutlook(
     swingLow: round(swingLow),
     swingLookbackDays: SWING_LOOKBACK_DAYS,
     priceSeries,
+    smaShortPeriod: hasTrend ? smaShortPeriod : null,
+    smaShortValue,
+    smaLongPeriod: smaLongValue !== null ? smaLongPeriod : null,
+    smaLongValue,
+    rsiPeriod: rsiValue !== null ? rsiPeriod : null,
+    rsiValue,
     narrative,
     actionBias: { direction, label, note: t.actionNote(label) },
     error: null,

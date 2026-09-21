@@ -77,6 +77,38 @@ lean when available) straight from `getEconomicConsensus()` -- verified
 live to match Market Consensus's own numbers exactly (AUD Employment
 Change: forecast 20.9K, previous -15.8K, leans bullish).
 
+**Technical Outlook: real SMA/RSI + server-side daily bars (same day)**:
+user asked for "better technical factors" plus more historical depth to
+draw from ("ตีย้อนหลังเพื่อ forecast"). The prior raw-tick fetch was
+capped by Supabase/PostgREST's hard 1000-row limit to ~7 days back
+regardless of `.limit()` -- not enough for a real 20-day SMA or 14-day
+RSI. Fixed at the root: added a Postgres function,
+`public.get_daily_price_bars(p_symbol, p_since)`
+(`supabase/migrations/20260921_daily_price_bars_function.sql`), that
+aggregates OHLC per Bangkok calendar day *in SQL* and returns one row per
+day -- so a 60-day lookback request returns ~10 rows today (real history
+only goes back to 2026-09-11) instead of thousands of raw ticks, and
+never touches the 1000-row cap no matter how far back it's asked to look.
+`getTechnicalOutlook` now calls this via `supabaseAdmin.rpc(...)` instead
+of querying `market_prices` directly, and reuses the same daily bars for
+pivots, swing, chart, and the new indicators (no separate query per
+indicator).
+
+Added real SMA(short)/SMA(long)/RSI, all periods capped to however many
+completed real days actually exist right now rather than padding or
+refusing to render -- e.g. today shows SMA(5)/SMA(10)/RSI(9) because only
+~10 real days of AUD/THB history exist; a `limitedHistory` narrative line
+says so explicitly, and once real data passes 20 days these become true
+SMA(20)/RSI(14) with no code change. The price chart gained a second
+overlay line (SMA short, sky blue, with a legend) that only starts
+drawing once enough trailing real bars exist for that point -- no
+fabricated left-edge padding. Narrative gained trend (price vs SMA,
+SMA-short vs SMA-long) and momentum (RSI overbought/oversold/neutral)
+lines, all computed from real prices, nothing else changed. Verified live
+against real Supabase data: SMA(5)=23.7192, SMA(10)=23.7682, RSI(9)=55.7,
+trend/momentum narrative and chart overlay all rendering correctly before
+push.
+
 **Daily Forecast now shows a number -- deliberately, before it clearly beats a
 baseline**: as of 2026-09-18, `forecast_runs` had 46 matched outcomes for
 `DAILY`/`1.0.0`, clearing Evaluation's `MIN_SAMPLE_SIZE` gate of 20. This file

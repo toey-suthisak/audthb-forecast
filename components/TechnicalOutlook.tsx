@@ -14,6 +14,10 @@ const STR = {
     actionBias: "Action bias",
     basedOn: (date: string) => `Pivot based on ${date}'s close`,
     chartAria: (from: string, to: string) => `AUD/THB price with pivot support/resistance levels, ${from} to ${to}`,
+    trend: (n: number) => `Trend (SMA ${n})`,
+    momentum: (n: number) => `Momentum (RSI ${n})`,
+    priceLegend: "Price",
+    smaLegend: (n: number) => `SMA(${n})`,
   },
   th: {
     title: "มุมมองทางเทคนิค",
@@ -25,6 +29,10 @@ const STR = {
     actionBias: "แนวทาง Action",
     basedOn: (date: string) => `คำนวณ Pivot จากราคาปิดวันที่ ${date}`,
     chartAria: (from: string, to: string) => `กราฟราคา AUD/THB พร้อมแนวรับ-แนวต้าน จาก ${from} ถึง ${to}`,
+    trend: (n: number) => `แนวโน้ม (SMA ${n} วัน)`,
+    momentum: (n: number) => `Momentum (RSI ${n} วัน)`,
+    priceLegend: "ราคา",
+    smaLegend: (n: number) => `SMA(${n})`,
   },
 } as const;
 
@@ -47,19 +55,22 @@ function PriceChart({
   series,
   pivots,
   currentRate,
+  smaShortPeriod,
   locale,
 }: {
   series: PricePoint[];
   pivots: NonNullable<TechnicalOutlookData["pivots"]>;
   currentRate: number | null;
+  smaShortPeriod: number | null;
   locale: Locale;
 }) {
   const t = STR[locale];
   if (series.length < 2) return null;
 
   const closes = series.map((p) => p.close);
+  const smaValues = series.map((p) => p.smaShort).filter((v): v is number => v !== null);
   const levels = [pivots.r2, pivots.r1, pivots.pivot, pivots.s1, pivots.s2];
-  const allValues = [...closes, ...levels, ...(currentRate !== null ? [currentRate] : [])];
+  const allValues = [...closes, ...smaValues, ...levels, ...(currentRate !== null ? [currentRate] : [])];
 
   const rawMin = Math.min(...allValues);
   const rawMax = Math.max(...allValues);
@@ -82,6 +93,19 @@ function PriceChart({
 
   const lastX = CHART_PAD_LEFT + (series.length - 1) * stepX;
   const lastY = yFor(closes[closes.length - 1]);
+
+  // SMA overlay only draws from the first index that has a real value --
+  // early points stay undefined rather than padded/faked (see
+  // rollingSma in lib/technical-outlook-data.ts).
+  let smaPath = "";
+  let smaStarted = false;
+  series.forEach((point, i) => {
+    if (point.smaShort === null) return;
+    const x = CHART_PAD_LEFT + i * stepX;
+    const y = yFor(point.smaShort);
+    smaPath += `${smaStarted ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)} `;
+    smaStarted = true;
+  });
 
   const referenceLines: { value: number; label: string; emphasis?: boolean }[] = [
     { value: pivots.r2, label: "R2" },
@@ -125,6 +149,18 @@ function PriceChart({
         );
       })}
 
+      {smaPath && (
+        <path
+          d={smaPath.trim()}
+          fill="none"
+          strokeWidth={1.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="text-sky-600 dark:text-sky-400"
+          stroke="currentColor"
+        />
+      )}
+
       <path
         d={path}
         fill="none"
@@ -136,6 +172,24 @@ function PriceChart({
       />
       <circle cx={lastX} cy={lastY} r={3.5} fill="currentColor" className="text-stone-900 dark:text-stone-100" />
     </svg>
+  );
+}
+
+function ChartLegend({ smaShortPeriod, locale }: { smaShortPeriod: number | null; locale: Locale }) {
+  const t = STR[locale];
+  return (
+    <div className="flex items-center gap-4 mt-1.5 text-[11px] text-stone-500 dark:text-stone-400">
+      <span className="inline-flex items-center gap-1.5">
+        <span className="inline-block w-3 h-0.5 bg-stone-900 dark:bg-stone-100" />
+        {t.priceLegend}
+      </span>
+      {smaShortPeriod !== null && (
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block w-3 h-0.5 bg-sky-600 dark:bg-sky-400" />
+          {t.smaLegend(smaShortPeriod)}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -176,8 +230,27 @@ export default function TechnicalOutlook({
             series={outlook.priceSeries}
             pivots={outlook.pivots}
             currentRate={outlook.currentRate}
+            smaShortPeriod={outlook.smaShortPeriod}
             locale={locale}
           />
+          <ChartLegend smaShortPeriod={outlook.smaShortPeriod} locale={locale} />
+
+          {(outlook.smaShortValue !== null || outlook.rsiValue !== null) && (
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              {outlook.smaShortValue !== null && outlook.smaShortPeriod !== null && (
+                <div>
+                  <p className="text-xs text-stone-600 dark:text-stone-400">{t.trend(outlook.smaShortPeriod)}</p>
+                  <Figure value={outlook.smaShortValue.toFixed(4)} className="block text-base font-semibold" />
+                </div>
+              )}
+              {outlook.rsiValue !== null && outlook.rsiPeriod !== null && (
+                <div>
+                  <p className="text-xs text-stone-600 dark:text-stone-400">{t.momentum(outlook.rsiPeriod)}</p>
+                  <Figure value={outlook.rsiValue.toFixed(1)} className="block text-base font-semibold" />
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
             <div>
