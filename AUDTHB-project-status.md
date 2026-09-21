@@ -509,3 +509,33 @@ instead fits comfortably (+96/day → 631/800, 79% utilization; per-minute
 peak stays at 3-4, well under 8). Not yet built -- still needs the user's
 go-ahead on the feeds themselves (declined earlier this same day), this
 was capacity-planning only.
+
+## GBP/USD added to relative-market cron; DXY does not exist on Twelve Data (2026-09-21)
+
+User asked to add GBP/USD and DXY to the 30-min `/api/relative-market`
+cron, following the capacity check above (fits: +96/day). Added GBP/USD
+to `RELATIVE_SYMBOLS` in `app/api/relative-market/route.ts` (now
+`["USD/CNH", "USD/SGD", "GBP/USD"]`) -- verified live against the real
+Twelve Data API before adding (`time_series?symbol=GBP/USD` returns real
+quotes) and against the running dev cron (fetched, saved to
+`market_prices`, confirmed the row live in Supabase: `GBP/USD 1.3377 @
+2026-09-21 04:34 UTC`). Inert for now -- `dashboard-data.ts`'s
+`relativeMarketScore` still only queries `USD/CNH`/`USD/SGD` by name, so
+this just accumulates real history until a USD Driver Chain reader is
+built on top of it (same "collect now, build the view later" pattern as
+Technical Outlook's SMA/RSI).
+
+**DXY was not added -- it isn't a real Twelve Data symbol.**
+`time_series?symbol=DXY` returns a 404 ("invalid symbol"), and
+`symbol_search?symbol=DXY` only matches unrelated US stock tickers
+(Dixie Group, Destiny Tech100), not the ICE US Dollar Index. Twelve Data
+has no raw DXY-equivalent index in its indices list either. The closest
+real proxy is `UUP` (Invesco DB US Dollar Index Bullish Fund, an ETF
+that tracks the dollar index via futures) -- confirmed it returns real
+data via `time_series?symbol=UUP`, but it only trades NYSE hours (not
+24/7 like FX), and being an ETF/futures-tracking fund its price behavior
+isn't identical to the raw index. This is the same kind of proxy this
+project already uses for Risk (VIXY standing in for VIX), so it's a
+legitimate pattern here too -- but it changes what's actually being
+measured, so it needs the user's own call before adding it under a
+"DXY" label. Asked, not yet decided as of this entry.

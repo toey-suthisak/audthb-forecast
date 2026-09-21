@@ -8,6 +8,13 @@ import { supabaseAdmin } from "@/lib/supabase-server";
 const RELATIVE_SYMBOLS = [
   "USD/CNH",
   "USD/SGD",
+  // Added 2026-09-21 for a future USD Driver Chain view -- stored in
+  // market_prices like the pair above, but not yet read by any scoring
+  // or UI code (dashboard-data.ts's relativeMarketScore still only
+  // queries USD/CNH/USD/SGD by name, so this addition is inert until a
+  // reader is built). GBP/USD is a real Twelve Data FX pair, confirmed
+  // live before adding.
+  "GBP/USD",
 ] as const;
 
 type RelativeSymbol =
@@ -466,6 +473,7 @@ export async function GET(
       expectedSymbols: [
         "USD/CNH",
         "USD/SGD",
+        "GBP/USD",
       ],
 
       savedCount:
