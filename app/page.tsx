@@ -18,6 +18,8 @@ import BacktestPreview from "@/components/BacktestPreview";
 import TrendChart from "@/components/TrendChart";
 import ActionSummary from "@/components/ActionSummary";
 import TechnicalOutlook from "@/components/TechnicalOutlook";
+import DecisionSnapshot from "@/components/DecisionSnapshot";
+import ScoreExplained from "@/components/ScoreExplained";
 
 import { getLocale } from "@/lib/i18n-server";
 import type { Locale } from "@/lib/i18n";
@@ -25,6 +27,14 @@ import type { Locale } from "@/lib/i18n";
 import {
   getTechnicalOutlook,
 } from "@/lib/technical-outlook-data";
+
+import {
+  getDecisionSnapshot,
+} from "@/lib/decision-snapshot-data";
+
+import {
+  getScoreExplained,
+} from "@/lib/score-explained-data";
 
 import {
   getDashboardData,
@@ -217,6 +227,12 @@ export default async function Home() {
   const technicalOutlook =
     await getTechnicalOutlook(locale, data);
 
+  const decisionSnapshot =
+    await getDecisionSnapshot(data, locale);
+
+  const scoreExplained =
+    await getScoreExplained(data);
+
   const bangkokHour = Number(
     new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Bangkok", hour: "2-digit", hour12: false }).format(new Date()),
   );
@@ -281,6 +297,14 @@ export default async function Home() {
 
         <Alerts alerts={alerts} locale={locale} />
 
+        {/* DECISION SNAPSHOT -- the one thing an analyst deciding
+        prefund/postfund should see before anything else: bias +
+        confidence + nearest event risk + Track Record trust, all
+        already computed elsewhere on this page, just pulled to the top
+        so reading it doesn't require scrolling and synthesizing
+        manually. See lib/decision-snapshot-data.ts. */}
+        <DecisionSnapshot snapshot={decisionSnapshot} locale={locale} />
+
         {/* THE LEDGER -- the whole page's content is one continuous ruled
         sheet, not a grid of separately-bordered cards: every topic below
         is a row of this same sheet, divided by hairline rules
@@ -301,6 +325,12 @@ export default async function Home() {
               <ActionSummary data={data} locale={locale} />
             </div>
           </div>
+
+          {/* SCORE EXPLAINED -- what changed since ~24h ago, and which
+          factor is dominating today, both derived from the same
+          per-factor contribution math Core FX Score itself is built
+          from. See lib/score-explained-data.ts. */}
+          <ScoreExplained explained={scoreExplained} locale={locale} />
 
           {/* TECHNICAL OUTLOOK -- separate from Core FX Score / Forecast
           above: real pivot levels from this project's own price history,

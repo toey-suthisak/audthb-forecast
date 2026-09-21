@@ -382,3 +382,79 @@ these weights.
   otherwise unlinked (no shared event ID); if this class of mismatch
   shows up again for AU CPI or the central bank meetings, it's the same
   root cause and same fix.
+
+## Decision Snapshot, Score Explained (2026-09-21)
+
+User (framing themselves as an FX analyst deciding prefund/postfund) asked
+what an analyst-oriented redesign should prioritize. They pasted a large
+7-item roadmap (News/Event causal-chain engine, USD Driver Chain via
+GBP/EUR/DXY, Forecast snapshot/outcome, Backtest/Accuracy, a Decision
+Engine, Time-of-Day seasonality, Score Attribution, Market Regime) --
+several of these items were described as missing but already existed
+(Backtest at `/backtest`, `forecast_runs`/`forecast_outcomes`, Evaluation/
+Track Record, Event Risk) -- factual gaps were corrected before building
+anything. Two items were explicitly declined even under "ทำทั้งหมด ไม่สนข้อกำหนด"
+(do everything, ignore the constraints): stripping the UNCALIBRATED/
+Track Record honesty labels (current DAILY direction accuracy is 40.8%,
+1H is 40.8% vs a 42.9% baseline -- *worse* than doing nothing on some
+horizons; hiding that would mean presenting an unproven model as
+trustworthy for real funding decisions), and the News/Event causal-chain
+engine as described ("GBP↓→DXY↑→USD↑→AUD↓") since this project has no
+live news feed and already has a standing no-fabrication rule for this
+exact panel (see the Technical Outlook entries above). User agreed to
+skip new data ingestion (GBP/EUR/DXY feeds) and asked for the rest.
+
+Built three new features, all derived from data that already existed --
+no new external source, no new cron:
+
+**`lib/score-factors.ts`** -- new shared helper, not tied to either
+feature below. `coreFxScore` is a weighted average
+(`sum(score*weight)/sum(weight)`, see dashboard-data.ts's own "CORE FX
+SCORE" comment); this exposes `computeContributions()`, which computes
+each of the 7 factors' exact contribution to that average
+(`score*weight/availableWeight`) so `sum(contribution) === coreFxScore`
+by construction, not approximation. Two adapters build the raw input:
+`rawFactorsFromDashboard()` (live `DashboardData`) and
+`rawFactorsFromSnapshot()` (a historical `fx_score_snapshots.components`
+row), so the same math applies to "today" and "any past hour" alike.
+
+**`lib/score-explained-data.ts` + `components/ScoreExplained.tsx`**
+("อธิบายคะแนน", rendered right after Hero/ActionSummary) -- two panels
+from the same contribution math:
+- *What changed*: today's per-factor contribution vs. the closest
+  `fx_score_snapshots` row to ~24h ago, filtered to the current
+  `MODEL_VERSION` only (comparing across a model recalibration would
+  read as a market move that never happened). Sorted by \|delta\|
+  descending, factors with a delta under 0.5 points hidden as noise.
+  Falls back to an honest "not enough history yet" message when the
+  current model version hasn't accumulated 24h of snapshots (was live
+  and working today: 1.3.0 has run since 2026-09-18).
+- *What's driving today*: whichever factor has the largest
+  \|contribution\| today, labeled with its real factor name (Price/
+  Momentum, Relative Market, Commodity, Macro/Policy, Risk/VIXY, Cross
+  Currency, Mean Reversion) -- deliberately NOT the Fed/RBA/THB-flow
+  granularity the user's roadmap imagined, since this project's 7
+  factors don't carry that finer breakdown as separate real numbers.
+  Reported as MIXED when the top factor is under 35% of the total
+  \|contribution\| (a day with no clear single driver), rather than
+  forcing a single label. Verified live: Price/Momentum led today at
+  42%, hand-checked against the visible factor scores (contribution
+  math reconciled exactly, coreFxScore +28 = sum of all 7 contributions).
+
+**`lib/decision-snapshot-data.ts` + `components/DecisionSnapshot.tsx`**
+(rendered above the whole ledger, right after Alerts -- the first thing
+on the page) -- combines Action Bias direction, Core FX Score, Confidence
+level, the nearest Event Risk warning (if any), and DAILY Track Record
+accuracy into one strip, so reading the "verdict" doesn't require
+scrolling the whole page and synthesizing Hero + Technical Outlook +
+Evaluation manually. Every field is read from functions that already run
+elsewhere on the page (`getEventRisk`, `getConfidence`,
+`getEvaluationSummary`) -- no new judgment call, no new number, purely a
+presentation move. Verified live: "เอนไปทาง Postfund +28, ความมั่นใจ: ปานกลาง"
+plus the real Employment Change event warning and real 40.8%/49 DAILY
+Track Record line.
+
+Declined for a later session (needs a decision the user hasn't made
+yet): GBP/USD and EUR/USD live feeds for a real USD Driver Chain panel,
+and Time-of-Day seasonality (needs 60-90 days of intraday history this
+project doesn't have yet -- only ~10 days exist as of this entry).
