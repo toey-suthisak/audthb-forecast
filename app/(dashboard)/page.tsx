@@ -3,6 +3,8 @@ import Card from "@/components/v2/Card";
 import BadgeChip from "@/components/v2/BadgeChip";
 import RangeChart from "@/components/v2/RangeChart";
 import WatchlistRow from "@/components/v2/WatchlistRow";
+import InfoTooltip from "@/components/v2/InfoTooltip";
+import CautionToast from "@/components/v2/CautionToast";
 import { getLocale } from "@/lib/i18n-server";
 import { tLabel } from "@/lib/i18n";
 import { getDashboardData } from "@/lib/dashboard-data";
@@ -54,12 +56,24 @@ const STR = {
     notEnoughTrack: "Not enough resolved forecasts yet to score accuracy.",
     scoreBreakdown: "Score Breakdown",
     seeAll: "See full breakdown",
-    upcoming: "Upcoming Events",
-    noUpcoming: "No upcoming MEDIUM/HIGH-impact AUD/USD/THB events this week.",
+    upcoming: "Today's Events",
+    noUpcoming: "No MEDIUM/HIGH-impact AUD/USD/THB events scheduled today.",
     forecastLabel: "Forecast",
     previousLabel: "Previous",
     relatedMarkets: "Related Markets",
     caution: "Caution",
+    tip: {
+      rate: "The latest real AUD/THB rate from TwelveData, plus today's intraday high/low and % change vs. the last completed day's close.",
+      fxScore: "This app's own composite score (-100..+100) blending 7 weighted real signals (price momentum, cross-currency, relative market, commodity, mean reversion, macro/policy, risk) into one number.",
+      outlookToday: "A plain-language read of the Core FX Score's current bias, plus the real pivot levels (R1/S1) that would need to break for that bias to strengthen.",
+      priceTechnical: "Daily-bar price history for AUD/THB with classic pivot support/resistance levels computed from the last completed day.",
+      technicalLevels: "Classic floor-trader pivot points (Pivot, R1-R2, S1-S2) computed from the most recently completed day's high/low/close.",
+      technicalSignals: "Simple moving averages and RSI computed from this app's own real daily price history -- periods shrink automatically while less history exists.",
+      forecast: "This app's own rule-based price forecast per horizon (still UNCALIBRATED), shown with its real directional-accuracy track record vs. a naive baseline.",
+      scoreBreakdown: "How each of the 7 weighted factors contributed to the Core FX Score above -- contributions sum to the total score exactly.",
+      upcoming: "MEDIUM/HIGH-impact AUD/USD/THB economic events scheduled for today, with their forecast and previous values.",
+      relatedMarkets: "Real prices and % change for the pairs, commodities and yields this app's Core FX Score is built from.",
+    },
   },
   th: {
     rate: "AUD/THB",
@@ -98,12 +112,24 @@ const STR = {
     notEnoughTrack: "ข้อมูลผลลัพธ์ยังไม่พอสำหรับวัดความแม่นยำ",
     scoreBreakdown: "ปัจจัยขับเคลื่อน (Score Breakdown)",
     seeAll: "ดูรายละเอียดทั้งหมด",
-    upcoming: "ข่าว / เหตุการณ์สำคัญ (Upcoming Events)",
-    noUpcoming: "สัปดาห์นี้ไม่มีข่าวผลกระทบปานกลาง/สูงของ AUD/USD/THB",
+    upcoming: "ข่าว / เหตุการณ์วันนี้",
+    noUpcoming: "วันนี้ไม่มีข่าวผลกระทบปานกลาง/สูงของ AUD/USD/THB",
     forecastLabel: "คาดการณ์",
     previousLabel: "ครั้งก่อน",
     relatedMarkets: "ภาพรวมตลาดที่เกี่ยวข้อง",
     caution: "ข้อควรระวัง",
+    tip: {
+      rate: "ราคา AUD/THB ล่าสุดจริงจาก TwelveData พร้อมสูงสุด-ต่ำสุดวันนี้ และ % เปลี่ยนแปลงเทียบราคาปิดวันก่อนหน้าที่สมบูรณ์แล้ว",
+      fxScore: "คะแนนรวมของระบบนี้เอง (-100..+100) ผสม 7 ปัจจัยถ่วงน้ำหนักจริง (ราคา/โมเมนตัม, ค่าเงินคู่อื่น, ตลาดเปรียบเทียบ, สินค้าโภคภัณฑ์, การย้อนกลับค่าเฉลี่ย, มหภาค/นโยบาย, ความเสี่ยง) เป็นตัวเลขเดียว",
+      outlookToday: "สรุปทิศทางปัจจุบันของ Core FX Score เป็นภาษาง่าย ๆ พร้อมระดับ pivot จริง (R1/S1) ที่ต้องทะลุเพื่อให้ทิศทางนั้นชัดเจนขึ้น",
+      priceTechnical: "ราคา AUD/THB รายวันจริง พร้อมแนวรับ-แนวต้าน (pivot) แบบคลาสสิกที่คำนวณจากวันล่าสุดที่ข้อมูลสมบูรณ์แล้ว",
+      technicalLevels: "จุด pivot แบบคลาสสิก (Pivot, R1-R2, S1-S2) คำนวณจากราคาสูงสุด/ต่ำสุด/ปิดของวันล่าสุดที่สมบูรณ์แล้ว",
+      technicalSignals: "เส้นค่าเฉลี่ยเคลื่อนที่และ RSI คำนวณจากข้อมูลราคารายวันจริงของระบบนี้ -- ช่วงเวลาจะปรับลดอัตโนมัติขณะที่ข้อมูลย้อนหลังยังมีไม่มาก",
+      forecast: "คาดการณ์ราคาตามกฎของระบบนี้เอง (ยัง UNCALIBRATED) แสดงพร้อมสถิติความแม่นยำทิศทางจริงเทียบกับ baseline",
+      scoreBreakdown: "แต่ละ 7 ปัจจัยถ่วงน้ำหนักส่งผลต่อ Core FX Score ด้านบนอย่างไร -- ผลรวมของ contribution เท่ากับคะแนนรวมพอดี",
+      upcoming: "ข่าวเศรษฐกิจผลกระทบปานกลาง/สูงของ AUD/USD/THB ที่มีกำหนดวันนี้ พร้อมค่าคาดการณ์และค่าครั้งก่อน",
+      relatedMarkets: "ราคาจริงและ % เปลี่ยนแปลงของคู่เงิน สินค้าโภคภัณฑ์ และผลตอบแทนพันธบัตรที่ Core FX Score ของระบบนี้ใช้คำนวณ",
+    },
   },
 } as const;
 
@@ -179,7 +205,14 @@ export default async function DashboardPage() {
     getEconomicConsensus(),
   ]);
 
-  const upcoming = consensus.events.filter((e) => e.actualValue === null).sort((a, b) => a.eventDate.localeCompare(b.eventDate));
+  // Today (Bangkok) only, per the user's request -- same bangkokDateKey
+  // convention already used in lib/watchlist-data.ts for bucketing by
+  // real calendar day, not a new date convention.
+  const bangkokNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
+  const todayKey = `${bangkokNow.getUTCFullYear()}-${String(bangkokNow.getUTCMonth() + 1).padStart(2, "0")}-${String(bangkokNow.getUTCDate()).padStart(2, "0")}`;
+  const upcoming = consensus.events
+    .filter((e) => e.actualValue === null && e.eventDate === todayKey)
+    .sort((a, b) => a.eventDate.localeCompare(b.eventDate));
 
   const rangeSeries = technicalOutlook.priceSeries.map((p) => ({ date: p.date, close: p.close }));
 
@@ -220,12 +253,17 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <CautionToast alerts={alerts} locale={locale} />
+
       {/* Row 1: AUD/THB | FX Score | Today's Outlook */}
       <div className="grid lg:grid-cols-3 gap-6">
         <Card>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-v2-muted uppercase tracking-wide">{t.rate}</p>
+              <p className="text-xs font-medium text-v2-muted uppercase tracking-wide flex items-center gap-1.5">
+                {t.rate}
+                <InfoTooltip text={t.tip.rate} />
+              </p>
               {t.ratePair && <p className="text-[11px] text-v2-muted">{t.ratePair}</p>}
             </div>
             <BadgeChip label={t.live} tone="emerald" dot />
@@ -262,7 +300,10 @@ export default async function DashboardPage() {
 
         <Card>
           <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-v2-muted uppercase tracking-wide">{t.fxScore}</p>
+            <p className="text-xs font-medium text-v2-muted uppercase tracking-wide flex items-center gap-1.5">
+              {t.fxScore}
+              <InfoTooltip text={t.tip.fxScore} />
+            </p>
           </div>
           <p
             className={`font-mono mt-1 text-4xl font-bold ${
@@ -305,7 +346,10 @@ export default async function DashboardPage() {
         </Card>
 
         <Card>
-          <p className="text-xs font-medium text-v2-muted uppercase tracking-wide">{t.outlookToday}</p>
+          <p className="text-xs font-medium text-v2-muted uppercase tracking-wide flex items-center gap-1.5">
+            {t.outlookToday}
+            <InfoTooltip text={t.tip.outlookToday} />
+          </p>
           <p className={`text-2xl font-bold mt-1 ${biasTextClass(technicalOutlook.actionBias.direction)}`}>
             {technicalOutlook.actionBias.label}
           </p>
@@ -333,9 +377,15 @@ export default async function DashboardPage() {
       </div>
 
       {/* Row 2: Price chart | Technical Levels + Signals */}
-      <div className="grid lg:grid-cols-5 gap-6">
-        <div className="lg:col-span-3">
-          <Card title={t.priceTechnical}>
+      <div className="grid lg:grid-cols-2 gap-6">
+        <Card
+          title={
+            <span className="flex items-center gap-1.5">
+              {t.priceTechnical}
+              <InfoTooltip text={t.tip.priceTechnical} />
+            </span>
+          }
+        >
             <RangeChart
               series={rangeSeries}
               locale={locale}
@@ -373,10 +423,16 @@ export default async function DashboardPage() {
               </div>
             </div>
           </Card>
-        </div>
 
-        <div className="lg:col-span-2 space-y-6">
-          <Card title={t.technicalLevels}>
+        <div className="space-y-6">
+          <Card
+            title={
+              <span className="flex items-center gap-1.5">
+                {t.technicalLevels}
+                <InfoTooltip text={t.tip.technicalLevels} />
+              </span>
+            }
+          >
             {technicalOutlook.pivots ? (
               <div className="space-y-2 text-sm">
                 {[
@@ -397,7 +453,14 @@ export default async function DashboardPage() {
             )}
           </Card>
 
-          <Card title={t.technicalSignals}>
+          <Card
+            title={
+              <span className="flex items-center gap-1.5">
+                {t.technicalSignals}
+                <InfoTooltip text={t.tip.technicalSignals} />
+              </span>
+            }
+          >
             <div className="space-y-2.5 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-v2-muted">
@@ -446,9 +509,15 @@ export default async function DashboardPage() {
       </div>
 
       {/* Row 3: Forecast | Score Breakdown */}
-      <div className="grid lg:grid-cols-5 gap-6">
-        <div className="lg:col-span-3">
-          <Card title={t.forecast}>
+      <div className="grid lg:grid-cols-2 gap-6">
+        <Card
+          title={
+            <span className="flex items-center gap-1.5">
+              {t.forecast}
+              <InfoTooltip text={t.tip.forecast} />
+            </span>
+          }
+        >
             <div className="grid sm:grid-cols-3 gap-4">
               {technicalOutlook.forecasts.map((f) => (
                 <div key={f.horizon} className="rounded-lg border border-v2-border p-4">
@@ -489,10 +558,15 @@ export default async function DashboardPage() {
               ))}
             </div>
           </Card>
-        </div>
 
-        <div className="lg:col-span-2">
-          <Card title={t.scoreBreakdown}>
+        <Card
+          title={
+            <span className="flex items-center gap-1.5">
+              {t.scoreBreakdown}
+              <InfoTooltip text={t.tip.scoreBreakdown} />
+            </span>
+          }
+        >
             <div className="space-y-3">
               {factors.map((f) => {
                 const label = FACTOR_LABELS[f.key][locale];
@@ -519,13 +593,19 @@ export default async function DashboardPage() {
               {t.seeAll} &rarr;
             </Link>
           </Card>
-        </div>
       </div>
 
-      {/* Row 4: Upcoming Events | Related Markets */}
-      <div className="grid lg:grid-cols-5 gap-6">
-        <div className="lg:col-span-3">
-          <Card title={t.upcoming} padded={false}>
+      {/* Row 4: Today's Events | Related Markets */}
+      <div className="grid lg:grid-cols-2 gap-6">
+        <Card
+          title={
+            <span className="flex items-center gap-1.5">
+              {t.upcoming}
+              <InfoTooltip text={t.tip.upcoming} />
+            </span>
+          }
+          padded={false}
+        >
             {upcoming.length === 0 ? (
               <p className="text-sm text-v2-muted p-5">{t.noUpcoming}</p>
             ) : (
@@ -552,33 +632,22 @@ export default async function DashboardPage() {
               </div>
             )}
           </Card>
-        </div>
 
-        <div className="lg:col-span-2">
-          <Card title={t.relatedMarkets}>
-            <div>
-              {relatedMarkets.map((item) => (
-                <WatchlistRow key={item.label} item={item} />
-              ))}
-            </div>
-          </Card>
-        </div>
-      </div>
-
-      {alerts.length > 0 && (
-        <div className="rounded-xl border border-amber-300/60 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/30 p-4">
-          <p className="text-xs font-semibold text-amber-800 dark:text-amber-400 uppercase tracking-wide flex items-center gap-1.5">
-            <span>&#9888;</span> {t.caution}
-          </p>
-          <ul className="space-y-1 mt-2">
-            {alerts.map((a, i) => (
-              <li key={i} className="text-sm text-amber-800 dark:text-amber-300">
-                <span className="font-medium">{a.label}:</span> {a.detail}
-              </li>
+        <Card
+          title={
+            <span className="flex items-center gap-1.5">
+              {t.relatedMarkets}
+              <InfoTooltip text={t.tip.relatedMarkets} />
+            </span>
+          }
+        >
+          <div>
+            {relatedMarkets.map((item) => (
+              <WatchlistRow key={item.label} item={item} />
             ))}
-          </ul>
-        </div>
-      )}
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }

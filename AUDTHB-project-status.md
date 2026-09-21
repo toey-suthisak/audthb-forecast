@@ -798,3 +798,47 @@ sparklines. Cross-checked `fx_score_snapshots` in Supabase directly --
 confirms the dashboard computes fresh on every request rather than
 reading the periodic snapshot table (expected, documented behavior,
 not a bug). `npx tsc --noEmit` and `npx next build` both pass clean.
+
+## Dashboard tab: tooltips, equal-width cards, today-only events, 24h caution popup (2026-09-21, same day)
+
+Sixth round of feedback:
+
+1. **Tooltips on every section heading**: new `components/v2/InfoTooltip.tsx`
+   -- a small "i" glyph rendered next to each card title, using the
+   native HTML `title` attribute rather than a custom JS tooltip, so it
+   works inside these async Server Components with zero client-side
+   code. Added a `tip.*` string per section to both locales in
+   `app/(dashboard)/page.tsx` explaining what that card actually shows
+   and where its numbers come from.
+2. **Cards resized to be roughly equal**: rows 2-4 (Price & Technical /
+   Technical Levels+Signals, Forecast / Score Breakdown, Today's Events
+   / Related Markets) switched from an uneven `lg:grid-cols-5` 3:2 split
+   to a plain `lg:grid-cols-2` even split, matching row 1's existing
+   3-equal-column layout.
+3. **Today's Events replaces the week-wide Upcoming Events list**: the
+   query now filters `consensus.events` to `eventDate === todayKey`
+   (Bangkok "today", same `bangkokDateKey`-style convention already
+   used in `lib/watchlist-data.ts`) instead of every not-yet-released
+   event this week. An empty day now shows an explicit "no
+   MEDIUM/HIGH-impact events scheduled today" message rather than
+   silently showing next week's events instead -- verified against
+   Supabase directly (`ff_weekly_calendar` has zero HIGH/MEDIUM rows
+   for today's date), matching the empty state rendered live.
+4. **Caution reverted from the inline bottom banner (added earlier
+   today) back to a dismissible popup** (`CautionToast`, near the top of
+   the page) per explicit request, *and* narrowed to a real 24-hour
+   window: `lib/alerts-data.ts`'s event-risk alert used to fire for
+   `eventRisk.level !== "NONE"`, which includes the 24-72h "WATCH"
+   window (`EVENT_RISK_HIGH_WINDOW_HOURS`/`EVENT_RISK_WATCH_WINDOW_HOURS`
+   in `lib/event-calendar-data.ts`) -- that's why a caution once showed
+   an event 69.4 hours away. Changed the condition to
+   `eventRisk.level === "HIGH"` only (events inside 24h), which is the
+   threshold already defined in that file, not a new one.
+
+Verified live at 1200px and 375px (mobile): all 10 tooltips confirmed
+present via `document.querySelectorAll('[title]')` with the correct
+real explanatory text per locale; Today's Events empty state matches a
+direct Supabase query for today; no caution popup renders right now
+since no alert currently qualifies for the 24h window (correct,
+verified via DOM inspection, not a missing feature). `npx tsc --noEmit`
+and `npx next build` both pass clean.

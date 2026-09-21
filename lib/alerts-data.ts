@@ -167,8 +167,13 @@ export async function getAlerts(data: DashboardData, locale: Locale = "th"): Pro
   // problem like the rest of this list, but it's exactly the kind of
   // thing that should interrupt a glance at the dashboard, so it rides
   // along here rather than only living in Hero's smaller caveat banner.
+  // Only the "HIGH" event-risk level (event inside 24h, see
+  // EVENT_RISK_HIGH_WINDOW_HOURS in event-calendar-data.ts) surfaces
+  // here -- "WATCH" (24-72h out) is informational, not yet a caution,
+  // per the user's explicit ask to keep this popup scoped to a 24h
+  // window rather than the wider 72h watch window.
   const eventRisk = await getEventRisk();
-  if (eventRisk.level !== "NONE" && eventRisk.event && eventRisk.hoursUntil !== null) {
+  if (eventRisk.level === "HIGH" && eventRisk.event && eventRisk.hoursUntil !== null) {
     const hoursLabel =
       eventRisk.hoursUntil < 1
         ? `${Math.round(eventRisk.hoursUntil * 60)} ${t.min}`
