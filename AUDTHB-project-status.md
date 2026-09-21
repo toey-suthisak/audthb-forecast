@@ -240,3 +240,19 @@ these weights.
   `overflow-x: hidden` on `html`/`body` in `app/globals.css` -- resolved,
   kept here only as a note in case it resurfaces on a real device this
   session's tooling couldn't test against.
+- **2026-09-21: renamed `event_calendar`'s AU Labour Force rows to
+  "Employment Change"**, matching `economic_consensus`'s (ForexFactory)
+  naming for the same real release. User noticed on a phone screenshot
+  that the Event Risk alert ("Labour Force, Australia") didn't visibly
+  match anything in Market Consensus below it ("Employment Change" /
+  "Unemployment Rate") -- same event, two independently-built,
+  never-reconciled tables (`event_calendar` from 2026-09-17,
+  `economic_consensus` from 2026-09-20) using different source
+  terminology (ABS's report title vs. ForexFactory's per-indicator
+  names). Fixed by renaming `event_calendar`'s 4 AU EMPLOYMENT rows
+  (`supabase/migrations/20260921_rename_labour_force_events.sql`), not
+  by touching `economic_consensus` -- ForexFactory's own naming there
+  should stay as ForexFactory names it. The two tables are still
+  otherwise unlinked (no shared event ID); if this class of mismatch
+  shows up again for AU CPI or the central bank meetings, it's the same
+  root cause and same fix.
