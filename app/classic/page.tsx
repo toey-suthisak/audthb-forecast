@@ -74,6 +74,11 @@ export const revalidate =
 // Context & News) gets one of these icon+text labels; a topic that is
 // just one row skips it, since a label directly over that row's own
 // heading is a duplicate kicker, not real hierarchy.
+//
+// This page moved from `/` to `/classic` on 2026-09-21 when the user
+// asked for a full redesign (new light/blue-purple 6-tab dashboard at
+// `/`, see app/(dashboard)/*) -- kept intact and reachable here as a
+// fallback/reference, not deleted.
 type SectionColor = "brass" | "amber";
 
 const SECTION_COLOR_CLASSES: Record<SectionColor, string> = {
@@ -202,7 +207,7 @@ function SectionLabel({
   );
 }
 
-export default async function Home() {
+export default async function ClassicHome() {
   const locale = await getLocale();
   const s = PAGE_STRINGS[locale];
 

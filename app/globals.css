@@ -118,6 +118,41 @@
   }
 }
 
+/* =========================================================
+   V2 DASHBOARD TOKENS -- additive, not a replacement of the almanac
+   tokens above. The almanac pages (/classic, /backtest, /score-breakdown,
+   /economic-calendar, /status) keep using --background/--surface/--brass
+   unchanged; the new 6-tab dashboard (app/(dashboard)/*) uses these
+   instead. Semantic up/down colors reuse Tailwind's built-in emerald/red
+   directly in components -- no new tokens needed for those. Primary
+   blue and accent indigo are also just Tailwind's built-in blue and
+   indigo utility classes used directly in components (same value in
+   both themes), so only the tokens that actually swap by theme live here.
+   ========================================================= */
+:root {
+  --v2-bg: #f8fafc;
+  --v2-surface: #ffffff;
+  --v2-border: #e2e8f0;
+  --v2-foreground: #0f172a;
+  --v2-muted: #64748b;
+}
+
+.dark {
+  --v2-bg: #0b1120;
+  --v2-surface: #131c31;
+  --v2-border: #253552;
+  --v2-foreground: #e7ecf5;
+  --v2-muted: #93a1bb;
+}
+
+@theme inline {
+  --color-v2-bg: var(--v2-bg);
+  --color-v2-surface: var(--v2-surface);
+  --color-v2-border: var(--v2-border);
+  --color-v2-foreground: var(--v2-foreground);
+  --color-v2-muted: var(--v2-muted);
+}
+
 /* Belt-and-suspenders against horizontal scroll on narrow viewports --
    traced a case where a `position: fixed` element's containing block
    was computed wider than the actual visual viewport (StickyBar.tsx),

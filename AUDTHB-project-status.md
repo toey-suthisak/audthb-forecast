@@ -539,3 +539,79 @@ project already uses for Risk (VIXY standing in for VIX), so it's a
 legitimate pattern here too -- but it changes what's actually being
 measured, so it needs the user's own call before adding it under a
 "DXY" label. Asked, not yet decided as of this entry.
+
+## Full redesign: new 6-tab dashboard at `/` (2026-09-21)
+
+User shared a reference mockup (light theme, blue/purple SaaS-dashboard
+look, 6 tabs: Dashboard/Analysis/Events/Data/Performance/About) and asked
+for the site to be rebuilt to match it. Confirmed before building (see
+plan approval): adopt the new visual style fully (not a reskin of the
+almanac look), add real tab navigation (reverses an earlier explicit
+decision -- `app/classic/page.tsx`'s own comment: "a sidebar/tabs
+structure was tried and explicitly rejected earlier"), build all 6
+sections in one pass, and show GBP/USD instead of the mockup's
+illustrative "DXY" row (not a real Twelve Data symbol, see the entry
+above).
+
+**The old homepage moved intact to `/classic`**, not deleted -- every
+component/lib function it used stays exactly as-is, reachable at that
+URL as a fallback/reference. The new dashboard now owns `/`, `/analysis`,
+`/events`, `/data`, `/performance`, `/about` under a `(dashboard)` route
+group (`app/(dashboard)/layout.tsx` + one page per tab). The 4
+pre-existing standalone pages (`/backtest`, `/score-breakdown`,
+`/economic-calendar`, `/status`) were **not** redirected into the new
+tabs as originally planned -- left fully independent instead, to avoid
+`/classic`'s own internal links jumping into the new dashboard
+mid-read. All still reachable and working.
+
+**New v2 design tokens** (`app/globals.css`): `--v2-bg/-surface/-border/
+-foreground/-muted`, additive alongside the existing almanac tokens
+(`--background`/`--surface`/`--brass`, untouched) -- `/classic` and the
+4 standalone pages render exactly as before. Primary blue / accent
+indigo reuse Tailwind's built-in classes directly, no new tokens needed
+since they don't swap by theme. New shared primitives in
+`components/v2/`: `Card`, `BadgeChip`, `KpiCard`, `DonutGauge` (hand-
+rolled SVG, same no-library convention as `TrendChart.tsx`), `Sparkline`,
+`RangeChart` (range-toggle line chart -- buttons read "7D/30D/90D/All"
+rather than the mockup's "1D/1W/1M/3M/1Y", since this app's real price
+history is daily-bar granularity, not intraday -- renamed to match what
+it actually shows), `WatchlistRow`, `TabNav`, `Header`, `AnalysisTabs`.
+
+**Every number still traces to something real** -- no new fabrication,
+matching this session's standing rule:
+- Dashboard/Analysis reuse `getDashboardData`, `getTechnicalOutlook`
+  (pivots/SMA/RSI/merged Forecast/upcoming events), `getDecisionSnapshot`,
+  `getScoreExplained`, `getAlerts`, `getEconomicConsensus` /
+  `getRecentEconomicOutcomes` unchanged.
+- Performance reuses `getEvaluationSummary`, `getBacktestSummary`, plus
+  a new `lib/forecast-history-data.ts` (`getForecastHistory`) that
+  renders `forecast_runs`/`forecast_outcomes` rows -- real data that
+  already existed but was never charted/tabled before.
+- Data tab: new `lib/data-health-data.ts` (`getDataHealth`) assembles a
+  per-feed freshness table from fields `DashboardData` already computes
+  (no new scoring), plus one supplementary query for GBP/USD (tracked
+  since 2026-09-21, not yet part of Core FX Score). Source list is only
+  this project's real sources (Twelve Data, DBnomics, OilPriceAPI,
+  Gold-API, "Various" for macro) -- deliberately not the mockup's
+  "TradingView"/"NewsAPI" rows, which this app doesn't actually use.
+- Analysis > Correlation: new `lib/correlation-data.ts`
+  (`getCorrelations`) computes real Pearson correlation between AUD/THB
+  and each other real driver's daily % change via `get_daily_price_bars`
+  (generalized to any symbol), gated at 15+ overlapping real days.
+  Verified live: correctly shows "needs 15+ overlapping days" for every
+  driver right now, since real price history is only ~11 days deep --
+  will start reporting real numbers automatically as more accumulates,
+  same pattern as every other "not enough data yet" feature this session.
+- Shared per-factor math: new `lib/score-factors.ts` (`computeContributions`)
+  factored out for reuse across Score Explained and the new Analysis >
+  Drivers sub-tab -- unchanged from Score Explained's original math.
+
+**Verified live before shipping**: typecheck/build clean at every stage
+(not just the end), all 11 routes (`/`, `/classic`, the 5 new tabs, the
+4 standalone pages) return 200, real numbers on every new tab cross-
+checked against Supabase and against each other (e.g. Data tab's
+AUD/THB Direct value matches Dashboard tab's exactly; Analysis > Drivers'
+dominant-factor share reconciles by hand against the visible factor
+contributions), dark mode confirmed via computed styles, mobile width
+(375px) confirmed no horizontal overflow beyond the intended scrollable
+tab bar.
