@@ -42,28 +42,19 @@ export default function TabNav({ locale }: { locale: Locale }) {
   const t = STR[locale];
 
   return (
-    <nav className="flex items-center gap-1 overflow-x-auto px-4 sm:px-6">
-      {TABS.map((tab, i) => {
+    <nav className="flex items-stretch overflow-x-auto px-4 sm:px-6">
+      {TABS.map((tab) => {
         const active = pathname === tab.href;
         return (
           <Link
             key={tab.href}
             href={tab.href}
-            className={`relative flex items-center gap-2 whitespace-nowrap px-3 py-3 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex-1 flex items-center justify-center whitespace-nowrap px-3 py-3 text-sm font-medium border-b-2 transition-colors ${
               active
                 ? "border-blue-600 text-blue-600 dark:text-blue-400"
                 : "border-transparent text-v2-muted hover:text-v2-foreground"
             }`}
           >
-            <span
-              className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold ${
-                active
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-100 text-v2-muted dark:bg-slate-800"
-              }`}
-            >
-              {i + 1}
-            </span>
             {t[tab.key]}
           </Link>
         );

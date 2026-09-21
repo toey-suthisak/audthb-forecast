@@ -615,3 +615,53 @@ dominant-factor share reconciles by hand against the visible factor
 contributions), dark mode confirmed via computed styles, mobile width
 (375px) confirmed no horizontal overflow beyond the intended scrollable
 tab bar.
+
+## Dashboard tab revisions from a screenshot (2026-09-21, same day)
+
+User reviewed the shipped Dashboard tab against a screenshot and asked
+for 7 changes:
+
+1. **`TabNav`**: removed the numbered circle badges, tabs now stretch
+   `flex-1` to fill the bar edge-to-edge (matches the content grid's
+   width below instead of a left-packed cluster).
+2. **Caution banner -> dismissible popup**: new `components/v2/
+   CautionToast.tsx` (client component), fixed-position floating card
+   with an X close button, session-only dismiss (no persistence -- a
+   stale dismissal shouldn't hide a genuinely new alert).
+3. **Core FX Score + Action Bias merged** into one `Card` (was two
+   separate cards) -- score/bias on top, Action Bias verdict + note
+   below a divider inside the same card.
+4. **Price + Technical Levels merged**: `RangeChart` (`components/v2/
+   RangeChart.tsx`) now takes optional `pivots`/`currentRate` props and
+   draws all 7 pivot levels (R3/R2/R1/Pivot/S1/S2/S3, not just R2-S2 as
+   before) as reference lines directly on the chart, plus a current-
+   price figure above it -- same real `technicalOutlook.pivots`/
+   `currentRate` data, just no longer a separate text-only card.
+5. **Related Markets sparklines were incomplete** (only FX pairs had
+   them) -- root cause: commodities live in a separate `commodity_prices`
+   table with no daily-bar SQL function like FX's
+   `get_daily_price_bars`, and VIXY (which *is* in `market_prices`, so
+   the RPC already worked for it) wasn't being queried through it yet.
+   Fixed in `lib/watchlist-data.ts`: VIXY now uses the existing RPC,
+   Iron Ore/Brent/Gold get a new JS-side Bangkok-day bucketing
+   (`dailyClosesFromCommodityPrices` -- row counts are small enough
+   under Supabase's cap that no SQL function was needed), and AU/US 2Y
+   yields get a real sparkline from `yield_snapshots` history. Every
+   Related Markets row now has a real sparkline and a real % change
+   (previously several were hardcoded to `series: []` because no
+   history source was wired up).
+6. **Upcoming Events now shows the event date** next to each event name.
+7. **Overall Dashboard layout re-ordered** to match the above: Rate |
+   Score+Action (2 cols) -> Price & Technical (full width) -> Forecast |
+   Upcoming Events (2 cols) -> Related Markets (full width), with the
+   Caution toast floating outside the normal flow instead of occupying
+   the top of the page.
+
+Verified live: dismiss button removes the toast, R3/S3 lines render on
+the chart alongside R2/R1/P/S1/S2 with the correct pivot basis date,
+every Related Markets row shows a real sparkline + % change (Iron Ore
+-0.46%, Brent -5.12%, Gold +1.38%, VIXY -2.74%, AU/US yields +3.48%/
++5.42% -- all computed over whatever real history exists per symbol,
+not a fixed 1H/24H window like the old dashboard fields, so these can
+span longer real ranges for symbols with deeper history than AUD/THB's
+own ~11 days).

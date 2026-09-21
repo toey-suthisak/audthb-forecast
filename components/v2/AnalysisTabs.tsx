@@ -133,7 +133,12 @@ export default function AnalysisTabs({
       {tab === "price" && (
         <Card title={t.price}>
           {technicalOutlook.priceSeries.length > 0 ? (
-            <RangeChart series={technicalOutlook.priceSeries.map((p) => ({ date: p.date, close: p.close }))} locale={locale} />
+            <RangeChart
+              series={technicalOutlook.priceSeries.map((p) => ({ date: p.date, close: p.close }))}
+              locale={locale}
+              pivots={technicalOutlook.pivots}
+              currentRate={technicalOutlook.currentRate}
+            />
           ) : (
             <p className="text-sm text-v2-muted">{technicalOutlook.error}</p>
           )}

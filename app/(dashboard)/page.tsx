@@ -1,8 +1,8 @@
 import Card from "@/components/v2/Card";
-import KpiCard from "@/components/v2/KpiCard";
 import BadgeChip from "@/components/v2/BadgeChip";
 import RangeChart from "@/components/v2/RangeChart";
 import WatchlistRow from "@/components/v2/WatchlistRow";
+import CautionToast from "@/components/v2/CautionToast";
 import { getLocale } from "@/lib/i18n-server";
 import { tLabel } from "@/lib/i18n";
 import { getDashboardData } from "@/lib/dashboard-data";
@@ -19,48 +19,32 @@ const STR = {
   en: {
     rate: "AUD/THB",
     live: "LIVE",
-    open: "Open",
     high: "High",
     low: "Low",
     today: "Today's Range",
     coreScore: "Core FX Score",
     actionBias: "Action Bias",
     confidence: "Confidence",
-    intraday: "Price",
-    technicalLevels: "Technical Levels",
+    priceTechnical: "Price & Technical",
     forecast: "Forecast",
     upcoming: "Upcoming Events",
     noUpcoming: "No upcoming HIGH-impact events with a forecast right now.",
     relatedMarkets: "Related Markets",
-    caution: "Caution",
-    r2: "R2",
-    r1: "R1",
-    pivot: "Pivot",
-    s1: "S1",
-    s2: "S2",
   },
   th: {
     rate: "AUD/THB",
     live: "LIVE",
-    open: "เปิด",
     high: "สูงสุด",
     low: "ต่ำสุด",
     today: "ช่วงราคาวันนี้",
     coreScore: "Core FX Score",
     actionBias: "แนวทาง Action",
     confidence: "ความมั่นใจ",
-    intraday: "ราคา",
-    technicalLevels: "แนวรับ-แนวต้าน",
+    priceTechnical: "ราคา & เทคนิค",
     forecast: "พยากรณ์",
     upcoming: "ข่าวที่จะประกาศเร็วๆ นี้",
     noUpcoming: "ตอนนี้ไม่มีข่าวผลกระทบสูงที่มีตัวเลขคาดการณ์รอประกาศ",
     relatedMarkets: "ตลาดที่เกี่ยวข้อง",
-    caution: "ข้อควรระวัง",
-    r2: "R2",
-    r1: "R1",
-    pivot: "จุดหมุน",
-    s1: "S1",
-    s2: "S2",
   },
 } as const;
 
@@ -68,6 +52,20 @@ function biasTone(direction: string): ChipTone {
   if (direction === "POSTFUND" || direction === "BULLISH") return "emerald";
   if (direction === "PREFUND" || direction === "BEARISH") return "red";
   return "slate";
+}
+
+function biasTextClass(direction: string): string {
+  const tone = biasTone(direction);
+  if (tone === "emerald") return "text-emerald-600 dark:text-emerald-400";
+  if (tone === "red") return "text-red-600 dark:text-red-400";
+  return "text-v2-muted";
+}
+
+function formatEventDate(isoDate: string, locale: "en" | "th"): string {
+  return new Date(isoDate).toLocaleDateString(locale === "th" ? "th-TH" : "en-GB", {
+    day: "numeric",
+    month: "short",
+  });
 }
 
 export default async function DashboardPage() {
@@ -91,34 +89,23 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {alerts.length > 0 && (
-        <div className="rounded-xl border border-amber-300/50 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/30 p-4">
-          <p className="text-xs font-semibold text-amber-800 dark:text-amber-400 uppercase tracking-wide mb-1.5">{t.caution}</p>
-          <ul className="space-y-1">
-            {alerts.map((a, i) => (
-              <li key={i} className="text-sm text-amber-800 dark:text-amber-300">
-                <span className="font-medium">{a.label}:</span> {a.detail}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <CautionToast alerts={alerts} locale={locale} />
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="grid lg:grid-cols-2 gap-6">
         <Card>
-          <KpiCard
-            label={t.rate}
-            value={data.latestPrice ? Number(data.latestPrice.rate).toFixed(4) : "--"}
-            badge={<BadgeChip label={t.live} tone="emerald" dot />}
-            sub={
-              data.change1H !== null && (
-                <span className={data.change1H >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
-                  {data.change1H >= 0 ? "+" : ""}
-                  {data.change1H.toFixed(2)}% (1H)
-                </span>
-              )
-            }
-          />
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-v2-muted uppercase tracking-wide">{t.rate}</p>
+            <BadgeChip label={t.live} tone="emerald" dot />
+          </div>
+          <p className="font-mono mt-1 text-3xl font-semibold text-v2-foreground">
+            {data.latestPrice ? Number(data.latestPrice.rate).toFixed(4) : "--"}
+          </p>
+          {data.change1H !== null && (
+            <p className={`text-sm mt-1 ${data.change1H >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+              {data.change1H >= 0 ? "+" : ""}
+              {data.change1H.toFixed(2)}% (1H)
+            </p>
+          )}
           <div className="grid grid-cols-3 gap-2 mt-4 text-xs text-v2-muted">
             <div>
               <p>{t.high}</p>
@@ -140,59 +127,48 @@ export default async function DashboardPage() {
         </Card>
 
         <Card>
-          <KpiCard
-            label={t.coreScore}
-            value={data.coreFxScore !== null ? `${data.coreFxScore > 0 ? "+" : ""}${data.coreFxScore}` : "--"}
-            valueClassName={
-              data.coreFxScore === null
-                ? ""
-                : data.coreFxScore >= 15
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : data.coreFxScore <= -15
-                    ? "text-red-600 dark:text-red-400"
-                    : "text-amber-600 dark:text-amber-400"
-            }
-            sub={<span>{tLabel(data.coreBias, locale)}</span>}
-            badge={<BadgeChip label={`${t.confidence}: ${tLabel(decisionSnapshot.confidenceLevel, locale)}`} tone={decisionSnapshot.confidenceLevel === "HIGH" ? "emerald" : decisionSnapshot.confidenceLevel === "MEDIUM" ? "amber" : "red"} />}
-          />
-        </Card>
-
-        <Card>
-          <KpiCard
-            label={t.actionBias}
-            value={technicalOutlook.actionBias.label}
-            valueClassName={biasTone(technicalOutlook.actionBias.direction) === "emerald" ? "text-emerald-600 dark:text-emerald-400" : biasTone(technicalOutlook.actionBias.direction) === "red" ? "text-red-600 dark:text-red-400" : ""}
-            sub={<span className="leading-relaxed">{technicalOutlook.actionBias.note}</span>}
-          />
-        </Card>
-      </div>
-
-      <div className="grid lg:grid-cols-3 gap-6">
-        <Card title={t.intraday} className="lg:col-span-2">
-          <RangeChart series={rangeSeries} locale={locale} />
-        </Card>
-
-        <Card title={t.technicalLevels}>
-          {technicalOutlook.pivots ? (
-            <div className="space-y-2 text-sm">
-              {[
-                { label: t.r2, value: technicalOutlook.pivots.r2 },
-                { label: t.r1, value: technicalOutlook.pivots.r1 },
-                { label: t.pivot, value: technicalOutlook.pivots.pivot },
-                { label: t.s1, value: technicalOutlook.pivots.s1 },
-                { label: t.s2, value: technicalOutlook.pivots.s2 },
-              ].map((row) => (
-                <div key={row.label} className="flex items-center justify-between">
-                  <span className="text-v2-muted">{row.label}</span>
-                  <span className="font-mono text-v2-foreground">{row.value.toFixed(4)}</span>
-                </div>
-              ))}
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium text-v2-muted uppercase tracking-wide">{t.coreScore}</p>
+              <p
+                className={`font-mono mt-1 text-3xl font-semibold ${
+                  data.coreFxScore === null
+                    ? "text-v2-foreground"
+                    : data.coreFxScore >= 15
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : data.coreFxScore <= -15
+                        ? "text-red-600 dark:text-red-400"
+                        : "text-amber-600 dark:text-amber-400"
+                }`}
+              >
+                {data.coreFxScore !== null ? `${data.coreFxScore > 0 ? "+" : ""}${data.coreFxScore}` : "--"}
+              </p>
+              <p className="text-xs text-v2-muted mt-1">{tLabel(data.coreBias, locale)}</p>
             </div>
-          ) : (
-            <p className="text-sm text-v2-muted">{technicalOutlook.error}</p>
-          )}
+            <BadgeChip
+              label={`${t.confidence}: ${tLabel(decisionSnapshot.confidenceLevel, locale)}`}
+              tone={decisionSnapshot.confidenceLevel === "HIGH" ? "emerald" : decisionSnapshot.confidenceLevel === "MEDIUM" ? "amber" : "red"}
+            />
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-v2-border">
+            <p className="text-xs font-medium text-v2-muted uppercase tracking-wide">{t.actionBias}</p>
+            <p className={`text-lg font-semibold mt-1 ${biasTextClass(technicalOutlook.actionBias.direction)}`}>
+              {technicalOutlook.actionBias.label}
+            </p>
+            <p className="text-xs text-v2-muted mt-1 leading-relaxed">{technicalOutlook.actionBias.note}</p>
+          </div>
         </Card>
       </div>
+
+      <Card title={t.priceTechnical}>
+        <RangeChart
+          series={rangeSeries}
+          locale={locale}
+          pivots={technicalOutlook.pivots}
+          currentRate={technicalOutlook.currentRate}
+        />
+      </Card>
 
       <div className="grid lg:grid-cols-3 gap-6">
         <Card title={t.forecast} className="lg:col-span-2">
@@ -200,9 +176,7 @@ export default async function DashboardPage() {
             {technicalOutlook.forecasts.map((f) => (
               <div key={f.horizon} className="rounded-lg border border-v2-border p-3">
                 <p className="text-xs font-semibold text-v2-muted">{f.horizon}</p>
-                <p className={`text-sm font-semibold mt-1 ${biasTone(f.direction) === "emerald" ? "text-emerald-600 dark:text-emerald-400" : biasTone(f.direction) === "red" ? "text-red-600 dark:text-red-400" : "text-v2-muted"}`}>
-                  {tLabel(f.direction, locale)}
-                </p>
+                <p className={`text-sm font-semibold mt-1 ${biasTextClass(f.direction)}`}>{tLabel(f.direction, locale)}</p>
                 {f.priceRange && (
                   <p className="font-mono text-xs text-v2-muted mt-1">
                     {f.priceRange.low.toFixed(4)}-{f.priceRange.high.toFixed(4)}
@@ -220,9 +194,12 @@ export default async function DashboardPage() {
             <div className="space-y-3">
               {upcoming.map((e, i) => (
                 <div key={i} className="text-sm">
-                  <p className="text-v2-foreground font-medium">
-                    {e.currency} {e.eventName}
-                  </p>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="text-v2-foreground font-medium">
+                      {e.currency} {e.eventName}
+                    </p>
+                    <p className="text-[11px] text-v2-muted shrink-0">{formatEventDate(e.eventDate, locale)}</p>
+                  </div>
                   <p className="text-xs text-v2-muted font-mono">
                     {e.forecastValue ?? "--"} / {e.previousValue ?? "--"}
                   </p>
