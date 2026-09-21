@@ -458,3 +458,54 @@ Declined for a later session (needs a decision the user hasn't made
 yet): GBP/USD and EUR/USD live feeds for a real USD Driver Chain panel,
 and Time-of-Day seasonality (needs 60-90 days of intraday history this
 project doesn't have yet -- only ~10 days exist as of this entry).
+
+## Released economic events -- the "after" half of the before/after pair (2026-09-21)
+
+User re-scoped the declined News/Event causal-chain engine into something
+real-data-only: show forecast-vs-previous before a release (already built,
+see the Technical Outlook entries above), then once the real number is
+out, show actual-vs-previous too. Buildable entirely from
+`economic_consensus`, which already stores `actual_value` and already gets
+it upserted daily by the ForexFactory ingest (`app/api/economic-consensus/
+route.ts`) -- the gap was purely that `getEconomicConsensus()` only ever
+queries `event_date >= today`, so a released event disappears from it the
+moment its date passes, before anything could show what actually happened.
+
+Added `getRecentEconomicOutcomes()` to `lib/economic-consensus-data.ts`
+(new query: last 5 days through today, `actual_value is not null`) and a
+shared `leanFromValues()` helper extracted for reuse (the existing
+`computeLean()` used by `getEconomicConsensus()` is untouched -- zero risk
+to already-shipped behavior). Each released event now gets *two* real
+comparisons instead of one collapsed lean: actual vs. forecast (did it
+surprise?) and actual vs. previous (did the trend improve or worsen?) --
+both can disagree, and both are shown rather than picking one. Wired into
+Technical Outlook's narrative as a new "Released" line, shown before the
+existing "Upcoming" line (mirrors reading the news in the order it
+happened). Verified: `economic_consensus` currently has zero rows with
+`actual_value` populated (ingestion only started 2026-09-20 and every
+AUD/USD/THB HIGH/MEDIUM event on the books so far is still in the future --
+the earliest, AUD Employment Change, releases 2026-09-22), confirmed the
+empty state renders cleanly with no error; verified the comparison logic
+itself in isolation with realistic values (Employment Change 25.2K vs.
+forecast 20.9K → bullish, vs. previous -15.8K → bullish; Unemployment
+Rate 4.6% vs. forecast 4.5% → bearish). Will start showing real lines
+automatically once real releases land -- no code change needed, same
+"fills in over time" pattern as Track Record.
+
+## Twelve Data capacity check (2026-09-21)
+
+User asked whether current Twelve Data usage leaves headroom to add more
+symbols, from a usage dashboard screenshot (99/800 daily credits, 3/8
+peak per-minute, as of 04:20am into the billing day). Audited every
+Twelve Data call against the live `cron.job` table: `/api/market` (AUD/THB,
+AUD/USD, USD/THB every 10 min, 24/7 = 432 credits/day),
+`/api/relative-market` (USD/CNH, USD/SGD every 30 min = 96/day),
+`/api/risk` (VIXY, hourly weekdays only, self-skips outside NYSE cash
+session = ~7/day) -- **≈535 credits/day total** (extrapolates to exactly
+the 99 seen by 04:20am), confirming the plan cap is 800/day, 8/min.
+Adding GBP/USD + EUR/USD to the 10-min market cron would breach the daily
+cap (+288/day → 823/800). Adding them to the 30-min relative-market cron
+instead fits comfortably (+96/day → 631/800, 79% utilization; per-minute
+peak stays at 3-4, well under 8). Not yet built -- still needs the user's
+go-ahead on the feeds themselves (declined earlier this same day), this
+was capacity-planning only.

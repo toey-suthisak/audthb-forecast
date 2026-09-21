@@ -78,6 +78,26 @@ function parseIndicatorValue(raw: string): number | null {
   return num;
 }
 
+// Shared by computeLean() below (forecast_vs_previous / actual_vs_forecast)
+// and getRecentEconomicOutcomes() (actual_vs_previous) -- same polarity
+// classification and parsing, just a different pair of values.
+function leanFromValues(eventName: string, newer: string | null, older: string | null): ConsensusLean | null {
+  if (newer === null || older === null) return null;
+
+  const polarity = classifyPolarity(eventName);
+  if (!polarity) return null;
+
+  const newerValue = parseIndicatorValue(newer);
+  const olderValue = parseIndicatorValue(older);
+  if (newerValue === null || olderValue === null) return null;
+
+  if (newerValue === olderValue) return "NEUTRAL";
+
+  const isHigher = newerValue > olderValue;
+  const isBullish = polarity === "HIGHER_IS_BULLISH" ? isHigher : !isHigher;
+  return isBullish ? "BULLISH" : "BEARISH";
+}
+
 function computeLean(
   eventName: string,
   forecastValue: string | null,
@@ -161,4 +181,72 @@ export async function getEconomicConsensus(): Promise<{
   }
 
   return { events: ((data ?? []) as DbRow[]).map(toConsensusEvent), error: null };
+}
+
+// =========================================================
+// RELEASED EVENTS -- the "after" half of the before/after pair Technical
+// Outlook's narrative shows: getEconomicConsensus() above only ever
+// looks from today forward, so an event that already happened (and
+// whose actual_value this project's daily ForexFactory upsert has since
+// filled in) never appears there once its date passes. This looks
+// backward instead, and reports BOTH real comparisons an analyst wants
+// once a number is out -- actual vs. forecast (did it surprise?) and
+// actual vs. previous (did the underlying trend improve or worsen?) --
+// not a single collapsed "lean" like the forward-looking event does.
+// =========================================================
+
+export type ReleasedEvent = {
+  eventDate: string;
+  currency: string;
+  eventName: string;
+  impact: "HIGH" | "MEDIUM";
+  forecastValue: string | null;
+  previousValue: string | null;
+  actualValue: string;
+  sourceUrl: string | null;
+  leanVsForecast: ConsensusLean | null;
+  leanVsPrevious: ConsensusLean | null;
+};
+
+const RELEASED_LOOKBACK_DAYS = 5;
+
+export async function getRecentEconomicOutcomes(): Promise<{
+  events: ReleasedEvent[];
+  error: string | null;
+}> {
+  const today = new Date().toISOString().slice(0, 10);
+  const since = new Date(Date.now() - RELEASED_LOOKBACK_DAYS * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
+  const { data, error } = await supabaseAdmin
+    .from("economic_consensus")
+    .select("event_date,currency,event_name,impact,forecast_value,previous_value,actual_value,source_url")
+    .gte("event_date", since)
+    .lte("event_date", today)
+    .not("actual_value", "is", null)
+    .in("impact", ["HIGH", "MEDIUM"])
+    .in("currency", ["AUD", "USD", "THB"])
+    .order("event_date", { ascending: false });
+
+  if (error) {
+    return { events: [], error: `Economic outcomes DB error: ${error.message}` };
+  }
+
+  const events: ReleasedEvent[] = ((data ?? []) as DbRow[])
+    .filter((row): row is DbRow & { actual_value: string } => row.actual_value !== null)
+    .map((row) => ({
+      eventDate: row.event_date,
+      currency: row.currency,
+      eventName: row.event_name,
+      impact: row.impact === "HIGH" ? "HIGH" : "MEDIUM",
+      forecastValue: row.forecast_value,
+      previousValue: row.previous_value,
+      actualValue: row.actual_value,
+      sourceUrl: row.source_url,
+      leanVsForecast: leanFromValues(row.event_name, row.actual_value, row.forecast_value),
+      leanVsPrevious: leanFromValues(row.event_name, row.actual_value, row.previous_value),
+    }));
+
+  return { events, error: null };
 }

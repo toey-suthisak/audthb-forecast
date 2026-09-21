@@ -2,7 +2,12 @@ import "server-only";
 import { supabaseAdmin } from "@/lib/supabase-server";
 import { tLabel, formatHoursUntil, type Locale } from "@/lib/i18n";
 import type { DashboardData } from "@/lib/dashboard-data";
-import { getEconomicConsensus, type ConsensusEvent } from "@/lib/economic-consensus-data";
+import {
+  getEconomicConsensus,
+  getRecentEconomicOutcomes,
+  type ConsensusEvent,
+  type ReleasedEvent,
+} from "@/lib/economic-consensus-data";
 import {
   buildForecast,
   FORECAST_HORIZONS,
@@ -75,6 +80,11 @@ const STR = {
       `Upcoming: ${currency} ${event} -- forecast ${forecast}`,
     leanBullish: "(leans bullish for the currency)",
     leanBearish: "(leans bearish for the currency)",
+    leanShort: { BULLISH: "bullish", BEARISH: "bearish", NEUTRAL: "neutral" },
+    releasedBase: (event: string, currency: string, actual: string) =>
+      `Released: ${currency} ${event} -- actual ${actual}`,
+    releasedVsForecast: (forecast: string, lean: string) => `vs. forecast ${forecast} (${lean})`,
+    releasedVsPrevious: (previous: string, lean: string) => `vs. previous ${previous} (${lean})`,
     smaLabel: (n: number) => `SMA(${n})`,
     rsiLabel: (n: number) => `RSI(${n})`,
     trendAboveSma: (n: number, value: number) =>
@@ -146,6 +156,11 @@ const STR = {
       `ข่าวที่จะประกาศเร็วๆ นี้: ${currency} ${event} -- คาดการณ์ ${forecast}`,
     leanBullish: "(เอนบวกต่อค่าเงินนั้น)",
     leanBearish: "(เอนลบต่อค่าเงินนั้น)",
+    leanShort: { BULLISH: "เอนบวก", BEARISH: "เอนลบ", NEUTRAL: "เป็นกลาง" },
+    releasedBase: (event: string, currency: string, actual: string) =>
+      `ประกาศแล้ว: ${currency} ${event} -- ตัวเลขจริง ${actual}`,
+    releasedVsForecast: (forecast: string, lean: string) => `เทียบคาดการณ์ ${forecast} (${lean})`,
+    releasedVsPrevious: (previous: string, lean: string) => `เทียบครั้งก่อน ${previous} (${lean})`,
     smaLabel: (n: number) => `เส้นค่าเฉลี่ย ${n} วัน`,
     rsiLabel: (n: number) => `RSI ${n} วัน`,
     trendAboveSma: (n: number, value: number) =>
@@ -319,6 +334,24 @@ function formatUpcomingEvent(event: ConsensusEvent, t: (typeof STR)[Locale]): st
   return base;
 }
 
+// The "after" half of the before/after pair -- formatUpcomingEvent above
+// shows forecast vs. previous ahead of release; this shows the real
+// actual number against BOTH real comparisons once it's out (did it
+// surprise vs. forecast, and did the trend improve/worsen vs. previous),
+// not a single collapsed lean.
+function formatReleasedEvent(event: ReleasedEvent, t: (typeof STR)[Locale]): string {
+  const parts = [t.releasedBase(event.eventName, event.currency, event.actualValue)];
+
+  if (event.forecastValue !== null && event.leanVsForecast !== null) {
+    parts.push(t.releasedVsForecast(event.forecastValue, t.leanShort[event.leanVsForecast]));
+  }
+  if (event.previousValue !== null && event.leanVsPrevious !== null) {
+    parts.push(t.releasedVsPrevious(event.previousValue, t.leanShort[event.leanVsPrevious]));
+  }
+
+  return parts.join(" ");
+}
+
 const SWING_LOOKBACK_DAYS = 7;
 
 // How far back to ask the DB for -- real history only goes back to
@@ -473,12 +506,22 @@ export async function getTechnicalOutlook(
   // to fold the app's existing Forecast panel (previously its own
   // section in Hero.tsx) into this one, per the user's request to merge
   // it with the technical levels it should be read against.
-  const [consensus, eventRisk, confidence, evaluation] = await Promise.all([
+  const [consensus, outcomes, eventRisk, confidence, evaluation] = await Promise.all([
     getEconomicConsensus(),
+    getRecentEconomicOutcomes(),
     getEventRisk(),
     getConfidence(dashboard, locale),
     getEvaluationSummary(),
   ]);
+
+  // Released first (most recently actionable -- the number is already
+  // out), then upcoming -- mirrors reading the news in the order it
+  // actually happened relative to "now".
+  const released = outcomes.events.filter((e) => e.impact === "HIGH").slice(0, 2);
+  for (const event of released) {
+    narrative.push(formatReleasedEvent(event, t));
+  }
+
   const upcoming = consensus.events
     .filter((e) => e.impact === "HIGH" && e.forecastValue !== null && e.actualValue === null)
     .slice(0, 2);
