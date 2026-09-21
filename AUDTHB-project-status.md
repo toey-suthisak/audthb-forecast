@@ -735,3 +735,66 @@ smoother with the extra stat blocks gone; Forecast cards show real
 actual changes (-0.07%/-0.13%/-0.01% for 1H/4H/DAILY) alongside real
 predicted ranges and correct arrows (→ for NEUTRAL, matching today's
 in-band Core FX Score).
+
+## Dashboard tab: full rebuild to match the reference mockup exactly (2026-09-21, same day)
+
+Fifth round -- the user attached a fully detailed reference screenshot
+(`dashboard เอาแบบนี้`, "make the dashboard like this") showing an
+8-section layout, and asked for that exact structure. This is a bigger
+rewrite of `app/(dashboard)/page.tsx` than the previous four rounds,
+still built entirely from existing real data -- no new data sources.
+
+1. **Row 1 split into 3 distinct cards** (previously Core FX Score and
+   Action Bias were merged into one card): AUD/THB (price, real
+   absolute+percent 1H change, real "updated HH:MM" from
+   `latestPrice.market_timestamp`, High/Low/Today's-%-change) | FX
+   Score (score, bias label, a hand-rolled horizontal -100..+100
+   gradient gauge with a position marker at `((score+100)/200)*100%`,
+   real Confidence badge from `getDecisionSnapshot()`, link to
+   `/analysis`) | Today's Outlook (`technicalOutlook.actionBias`
+   label/note, plus two new breakout-trigger boxes labeled Postfund/
+   Prefund using the *real* pivot R1/S1 levels as the breakout price --
+   not the mockup's illustrative numbers, this project's own computed
+   pivots).
+2. **Row 2 right column split into two stacked cards**: Technical
+   Levels (R2/R1/Pivot/S1/S2, colored red/black/green) and a new
+   Technical Signals card -- SMA(`smaShortPeriod`), RSI(`rsiPeriod`),
+   a short-term-trend line, and an SMA-cross line, each with an
+   up/down/flat arrow derived from values `technicalOutlook` already
+   computes (`smaShortValue` vs `currentRate`, `rsiValue` vs 60/40,
+   `smaShortValue` vs `smaLongValue`) -- no new calculation, just a new
+   card surfacing numbers that previously only fed the narrative prose.
+   Left column: same chart, now also showing 1H/4H/7-day-range/Today's-
+   range stats below it (restoring the two stats removed earlier today,
+   since the new layout has room and the mockup calls for them).
+3. **Row 3 added a Score Breakdown card** next to Forecast, using
+   `lib/score-factors.ts`'s existing `computeContributions()` (already
+   used by Analysis tab's Drivers sub-tab) -- 7 factors with real
+   weight%, a proportional bar, and the exact contribution value, which
+   sums to `coreFxScore` by construction. Forecast cards swapped their
+   "actual vs predicted" stat (added earlier today) for the mockup's
+   directional-accuracy track record (`forecast.trackRecord`, already
+   computed, just not previously shown here) -- both are real, this
+   just matches what the reference image asked for.
+4. **Upcoming Events flattened** from date-grouped sections back to a
+   per-row list (row = icon + event name + date + forecast/previous +
+   impact badge), matching the mockup; **Related Markets** switched
+   from a 3-column grid to a single-column list (same `WatchlistRow`
+   component, just a different container).
+5. **Caution banner moved from a dismissible floating popup
+   (`CautionToast`, added two rounds ago) to a static banner in normal
+   page flow at the bottom of the page** -- the reference image shows
+   it inline, not as an overlay. `CautionToast.tsx` is left in place
+   (unused by this page now) rather than deleted, in case a future
+   round reverts this.
+
+Verified live at 1400x2200 (desktop) and 375x812 (mobile, stacks
+cleanly to one column): all 4 rows + bottom banner render with real
+numbers -- FX Score +9..+17 (moved between checks, confirming it's
+computed live, not cached), Score Breakdown factors sum to the
+displayed Core FX Score, Technical Signals arrows match the real
+SMA/RSI values, Related Markets list shows all 9 real symbols with
+sparklines. Cross-checked `fx_score_snapshots` in Supabase directly --
+confirms the dashboard computes fresh on every request rather than
+reading the periodic snapshot table (expected, documented behavior,
+not a bug). `npx tsc --noEmit` and `npx next build` both pass clean.
