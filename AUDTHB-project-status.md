@@ -1069,3 +1069,30 @@ real months); current real reading was MA50 above MA200 (Golden
 Cross) and MACD histogram negative (Bearish, MACD 0.0684 below Signal
 0.0794). Confirmed no horizontal overflow at 375px mobile. `npx tsc
 --noEmit` and `npx next build` both pass clean.
+
+## Moved the new RSI/MA/MACD charts from Dashboard to Analysis (2026-09-22, same day)
+
+User asked for the Dashboard's Technical Signals card to go back to
+numbers-only, and for the two new charts (`PriceMaRsiChart`,
+`MacdChart`) to live on the Analysis tab instead.
+
+- `app/(dashboard)/page.tsx`: removed both chart components from
+  Technical Signals; the section now shows compact number rows
+  (RSI(14), MA50, MA200, MA50/MA200 cross verdict, MACD, Signal, MACD
+  bullish/bearish verdict) in the same row style as the existing
+  short-term SMA(5)/RSI(10) rows, plus the real "as of" source line
+  and a link to Analysis for the charts.
+- `app/(dashboard)/analysis/page.tsx`: now also fetches
+  `getLongTermTechnicals(locale)` and passes it to `AnalysisTabs`.
+- `components/v2/AnalysisTabs.tsx`: the Technical sub-tab gained two
+  new cards below the existing pivot/SMA/RSI card -- the 3-month
+  RSI(14)+MA50+MA200 chart and the 6-month MACD chart, each with the
+  same real narrative sentences (Golden/Death Cross, MACD bullish/
+  bearish with real numbers) that used to live on the Dashboard.
+
+Verified live: Dashboard's Technical Signals now renders zero `<svg>`
+elements for this section (numbers only); Analysis's Technical sub-tab
+renders both charts with the same real values (RSI 44.4, MA50
+23.5346, MA200 22.6754) the Dashboard shows as plain numbers --
+confirming both pages read the same underlying data. `npx tsc --noEmit`
+and `npx next build` both pass clean.

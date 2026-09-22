@@ -4,11 +4,14 @@ import { useState } from "react";
 import Card from "@/components/v2/Card";
 import BadgeChip from "@/components/v2/BadgeChip";
 import RangeChart from "@/components/v2/RangeChart";
+import PriceMaRsiChart from "@/components/v2/PriceMaRsiChart";
+import MacdChart from "@/components/v2/MacdChart";
 import type { ChipTone } from "@/components/v2/BadgeChip";
 import type { TechnicalOutlook } from "@/lib/technical-outlook-data";
 import type { ScoreExplained } from "@/lib/score-explained-data";
 import type { ReleasedEvent, ConsensusEvent } from "@/lib/economic-consensus-data";
 import type { CorrelationRow } from "@/lib/correlation-data";
+import type { LongTermTechnicals } from "@/lib/long-term-technicals-data";
 import type { FactorKey } from "@/lib/score-factors";
 import type { Locale } from "@/lib/i18n";
 
@@ -51,6 +54,20 @@ const STR = {
     strong: "Strong",
     moderate: "Moderate",
     weak: "Weak",
+    priceMaRsiTitle: "RSI(14) & MA50/MA200 -- 3 months",
+    macdTitle: "MACD -- 6 months",
+    asOf: (date: string, source: string) => `Real daily data as of ${date}, from ${source} -- a different source than the live intraday feed above.`,
+    rsiNow: (v: number) => `RSI(14) is currently ${v.toFixed(1)}`,
+    rsiOverboughtNote: " (overbought territory).",
+    rsiOversoldNote: " (oversold territory).",
+    rsiNeutralNote: " (no extreme in either direction).",
+    maGolden: (s: number, l: number) => `MA50 (${s.toFixed(4)}) is above MA200 (${l.toFixed(4)}) -- a "Golden Cross," a long-term bullish signal.`,
+    maDeath: (s: number, l: number) => `MA50 (${s.toFixed(4)}) is below MA200 (${l.toFixed(4)}) -- a "Death Cross," a long-term bearish signal.`,
+    macdBullish: (macd: number, sig: number, hist: number) =>
+      `MACD signal is currently POSITIVE (bullish) -- the MACD line (${macd.toFixed(4)}) is above the Signal line (${sig.toFixed(4)}), histogram +${hist.toFixed(4)}.`,
+    macdBearish: (macd: number, sig: number, hist: number) =>
+      `MACD signal is currently NEGATIVE (bearish) -- the MACD line (${macd.toFixed(4)}) is below the Signal line (${sig.toFixed(4)}), histogram ${hist.toFixed(4)}.`,
+    macdNotEnough: "Not enough real RBA F11.1 history yet to compute MACD.",
   },
   th: {
     price: "ราคา & กราฟ",
@@ -77,6 +94,20 @@ const STR = {
     strong: "แรง",
     moderate: "ปานกลาง",
     weak: "อ่อน",
+    priceMaRsiTitle: "RSI(14) และ MA50/MA200 -- ย้อนหลัง 3 เดือน",
+    macdTitle: "MACD -- ย้อนหลัง 6 เดือน",
+    asOf: (date: string, source: string) => `ข้อมูลรายวันจริง ณ วันที่ ${date} จาก ${source} -- คนละแหล่งกับฟีดเรียลไทม์ด้านบน`,
+    rsiNow: (v: number) => `RSI(14) ตอนนี้อยู่ที่ ${v.toFixed(1)}`,
+    rsiOverboughtNote: " (โซน overbought)",
+    rsiOversoldNote: " (โซน oversold)",
+    rsiNeutralNote: " (ยังไม่สุดโต่งไปทางใด)",
+    maGolden: (s: number, l: number) => `MA50 (${s.toFixed(4)}) อยู่เหนือ MA200 (${l.toFixed(4)}) -- เรียกว่า "Golden Cross" สัญญาณขาขึ้นระยะยาว`,
+    maDeath: (s: number, l: number) => `MA50 (${s.toFixed(4)}) อยู่ใต้ MA200 (${l.toFixed(4)}) -- เรียกว่า "Death Cross" สัญญาณขาลงระยะยาว`,
+    macdBullish: (macd: number, sig: number, hist: number) =>
+      `สัญญาณ MACD ตอนนี้เป็นบวก (Bullish) -- เส้น MACD (${macd.toFixed(4)}) อยู่เหนือเส้น Signal (${sig.toFixed(4)}), Histogram +${hist.toFixed(4)}`,
+    macdBearish: (macd: number, sig: number, hist: number) =>
+      `สัญญาณ MACD ตอนนี้เป็นลบ (Bearish) -- เส้น MACD (${macd.toFixed(4)}) อยู่ใต้เส้น Signal (${sig.toFixed(4)}), Histogram ${hist.toFixed(4)}`,
+    macdNotEnough: "ข้อมูล RBA F11.1 ย้อนหลังยังไม่พอสำหรับคำนวณ MACD",
   },
 } as const;
 
@@ -102,6 +133,7 @@ export default function AnalysisTabs({
   releasedEvents,
   upcomingEvents,
   correlations,
+  longTermTechnicals,
 }: {
   locale: Locale;
   technicalOutlook: TechnicalOutlook;
@@ -109,6 +141,7 @@ export default function AnalysisTabs({
   releasedEvents: ReleasedEvent[];
   upcomingEvents: ConsensusEvent[];
   correlations: { rows: CorrelationRow[]; minSamples: number };
+  longTermTechnicals: LongTermTechnicals;
 }) {
   const t = STR[locale];
   const [tab, setTab] = useState<SubTab>("price");
@@ -268,6 +301,60 @@ export default function AnalysisTabs({
             </div>
           ) : (
             <p className="text-sm text-v2-muted">{technicalOutlook.error}</p>
+          )}
+        </Card>
+      )}
+
+      {tab === "technical" && longTermTechnicals.available && (
+        <Card title={t.priceMaRsiTitle} className="mt-6">
+          <PriceMaRsiChart points={longTermTechnicals.priceStudy} locale={locale} />
+          <div className="mt-2 space-y-1 text-xs text-v2-muted leading-relaxed">
+            {longTermTechnicals.currentRsi14 !== null && (
+              <p>
+                {t.rsiNow(longTermTechnicals.currentRsi14)}
+                {longTermTechnicals.currentRsi14 >= 70
+                  ? t.rsiOverboughtNote
+                  : longTermTechnicals.currentRsi14 <= 30
+                    ? t.rsiOversoldNote
+                    : t.rsiNeutralNote}
+              </p>
+            )}
+            {longTermTechnicals.currentSma50 !== null && longTermTechnicals.currentSma200 !== null && (
+              <p>
+                {longTermTechnicals.maBias === "GOLDEN"
+                  ? t.maGolden(longTermTechnicals.currentSma50, longTermTechnicals.currentSma200)
+                  : t.maDeath(longTermTechnicals.currentSma50, longTermTechnicals.currentSma200)}
+              </p>
+            )}
+            {longTermTechnicals.dataAsOfDate && <p>{t.asOf(longTermTechnicals.dataAsOfDate, longTermTechnicals.source)}</p>}
+          </div>
+        </Card>
+      )}
+
+      {tab === "technical" && longTermTechnicals.available && (
+        <Card title={t.macdTitle} className="mt-6">
+          {longTermTechnicals.macdStudy.length >= 2 &&
+          longTermTechnicals.currentMacd !== null &&
+          longTermTechnicals.currentSignal !== null &&
+          longTermTechnicals.currentHistogram !== null ? (
+            <>
+              <MacdChart points={longTermTechnicals.macdStudy} locale={locale} />
+              <p
+                className={`mt-2 text-xs leading-relaxed font-medium ${
+                  longTermTechnicals.macdBias === "BULLISH"
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : longTermTechnicals.macdBias === "BEARISH"
+                      ? "text-red-600 dark:text-red-400"
+                      : "text-v2-muted"
+                }`}
+              >
+                {longTermTechnicals.macdBias === "BULLISH"
+                  ? t.macdBullish(longTermTechnicals.currentMacd, longTermTechnicals.currentSignal, longTermTechnicals.currentHistogram)
+                  : t.macdBearish(longTermTechnicals.currentMacd, longTermTechnicals.currentSignal, longTermTechnicals.currentHistogram)}
+              </p>
+            </>
+          ) : (
+            <p className="text-xs text-v2-muted">{t.macdNotEnough}</p>
           )}
         </Card>
       )}

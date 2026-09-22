@@ -5,6 +5,7 @@ import { getTechnicalOutlook } from "@/lib/technical-outlook-data";
 import { getScoreExplained } from "@/lib/score-explained-data";
 import { getEconomicConsensus, getRecentEconomicOutcomes } from "@/lib/economic-consensus-data";
 import { getCorrelations } from "@/lib/correlation-data";
+import { getLongTermTechnicals } from "@/lib/long-term-technicals-data";
 
 export const dynamic = "force-dynamic";
 
@@ -24,12 +25,13 @@ export default async function AnalysisPage() {
   const t = STR[locale];
 
   const data = await getDashboardData();
-  const [technicalOutlook, scoreExplained, consensus, outcomes, correlations] = await Promise.all([
+  const [technicalOutlook, scoreExplained, consensus, outcomes, correlations, longTermTechnicals] = await Promise.all([
     getTechnicalOutlook(locale, data),
     getScoreExplained(data),
     getEconomicConsensus(),
     getRecentEconomicOutcomes(),
     getCorrelations(),
+    getLongTermTechnicals(locale),
   ]);
 
   const upcoming = consensus.events.filter((e) => e.impact === "HIGH" && e.forecastValue !== null && e.actualValue === null);
@@ -49,6 +51,7 @@ export default async function AnalysisPage() {
         releasedEvents={released}
         upcomingEvents={upcoming}
         correlations={correlations}
+        longTermTechnicals={longTermTechnicals}
       />
     </div>
   );

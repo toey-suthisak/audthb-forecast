@@ -6,8 +6,6 @@ import WatchlistRow from "@/components/v2/WatchlistRow";
 import InfoTooltip from "@/components/v2/InfoTooltip";
 import CautionToast from "@/components/v2/CautionToast";
 import ScoreGauge from "@/components/v2/ScoreGauge";
-import PriceMaRsiChart from "@/components/v2/PriceMaRsiChart";
-import MacdChart from "@/components/v2/MacdChart";
 import {
   IconExchange,
   IconGauge,
@@ -76,20 +74,15 @@ const STR = {
     support3: "Support 3",
     pivotExplain: (basedOn: string, high: number, low: number, close: number, value: number) =>
       `The Pivot Point is the average of the previous completed day's (${basedOn}) high (${high.toFixed(4)}), low (${low.toFixed(4)}) and close (${close.toFixed(4)}) -- right now that's ${value.toFixed(4)}.`,
-    priceMaRsiTitle: "RSI(14) & MA50/MA200 -- 3 months",
-    macdTitle: "MACD -- 6 months",
+    longTermLabel: "Longer-term (RBA F11.1 daily)",
+    maCrossLabel: "MA50/MA200 cross",
+    goldenCross: "Golden Cross",
+    deathCross: "Death Cross",
+    macdSignalLabel: "MACD signal",
+    bullish: "Bullish",
+    bearish: "Bearish",
     asOf: (date: string, source: string) => `Real daily data as of ${date}, from ${source} -- a different source than the live intraday feed above.`,
-    rsiNow: (v: number) => `RSI(14) is currently ${v.toFixed(1)}`,
-    rsiOverboughtNote: " (overbought territory).",
-    rsiOversoldNote: " (oversold territory).",
-    rsiNeutralNote: " (no extreme in either direction).",
-    maGolden: (s: number, l: number) => `MA50 (${s.toFixed(4)}) is above MA200 (${l.toFixed(4)}) -- a "Golden Cross," a long-term bullish signal.`,
-    maDeath: (s: number, l: number) => `MA50 (${s.toFixed(4)}) is below MA200 (${l.toFixed(4)}) -- a "Death Cross," a long-term bearish signal.`,
-    macdBullish: (macd: number, sig: number, hist: number) =>
-      `MACD signal is currently POSITIVE (bullish) -- the MACD line (${macd.toFixed(4)}) is above the Signal line (${sig.toFixed(4)}), histogram +${hist.toFixed(4)}.`,
-    macdBearish: (macd: number, sig: number, hist: number) =>
-      `MACD signal is currently NEGATIVE (bearish) -- the MACD line (${macd.toFixed(4)}) is below the Signal line (${sig.toFixed(4)}), histogram ${hist.toFixed(4)}.`,
-    macdNotEnough: "Not enough real RBA F11.1 history yet to compute MACD.",
+    seeChartsOnAnalysis: "See the 3-month/6-month charts on Analysis",
     forecast: "Forecast",
     directionalAccuracy: (pct: number, n: number) => `${pct.toFixed(1)}% directional accuracy from ${n} runs`,
     vsBaseline: (pct: number) => `(vs. baseline ${pct.toFixed(1)}%)`,
@@ -154,20 +147,15 @@ const STR = {
     support3: "แนวรับ 3",
     pivotExplain: (basedOn: string, high: number, low: number, close: number, value: number) =>
       `จุดหมุน (Pivot) คือค่าเฉลี่ยของราคาสูงสุด (${high.toFixed(4)}) ต่ำสุด (${low.toFixed(4)}) และปิด (${close.toFixed(4)}) ของวันก่อนหน้าที่สมบูรณ์แล้ว (${basedOn}) -- ตอนนี้คือ ${value.toFixed(4)}`,
-    priceMaRsiTitle: "RSI(14) และ MA50/MA200 -- ย้อนหลัง 3 เดือน",
-    macdTitle: "MACD -- ย้อนหลัง 6 เดือน",
+    longTermLabel: "ระยะยาว (RBA F11.1 รายวัน)",
+    maCrossLabel: "MA50/MA200 cross",
+    goldenCross: "Golden Cross",
+    deathCross: "Death Cross",
+    macdSignalLabel: "สัญญาณ MACD",
+    bullish: "Bullish",
+    bearish: "Bearish",
     asOf: (date: string, source: string) => `ข้อมูลรายวันจริง ณ วันที่ ${date} จาก ${source} -- คนละแหล่งกับฟีดเรียลไทม์ด้านบน`,
-    rsiNow: (v: number) => `RSI(14) ตอนนี้อยู่ที่ ${v.toFixed(1)}`,
-    rsiOverboughtNote: " (โซน overbought)",
-    rsiOversoldNote: " (โซน oversold)",
-    rsiNeutralNote: " (ยังไม่สุดโต่งไปทางใด)",
-    maGolden: (s: number, l: number) => `MA50 (${s.toFixed(4)}) อยู่เหนือ MA200 (${l.toFixed(4)}) -- เรียกว่า "Golden Cross" สัญญาณขาขึ้นระยะยาว`,
-    maDeath: (s: number, l: number) => `MA50 (${s.toFixed(4)}) อยู่ใต้ MA200 (${l.toFixed(4)}) -- เรียกว่า "Death Cross" สัญญาณขาลงระยะยาว`,
-    macdBullish: (macd: number, sig: number, hist: number) =>
-      `สัญญาณ MACD ตอนนี้เป็นบวก (Bullish) -- เส้น MACD (${macd.toFixed(4)}) อยู่เหนือเส้น Signal (${sig.toFixed(4)}), Histogram +${hist.toFixed(4)}`,
-    macdBearish: (macd: number, sig: number, hist: number) =>
-      `สัญญาณ MACD ตอนนี้เป็นลบ (Bearish) -- เส้น MACD (${macd.toFixed(4)}) อยู่ใต้เส้น Signal (${sig.toFixed(4)}), Histogram ${hist.toFixed(4)}`,
-    macdNotEnough: "ข้อมูล RBA F11.1 ย้อนหลังยังไม่พอสำหรับคำนวณ MACD",
+    seeChartsOnAnalysis: "ดูกราฟ 3 เดือน/6 เดือนที่หน้าวิเคราะห์",
     forecast: "คาดการณ์ราคา",
     directionalAccuracy: (pct: number, n: number) => `ความแม่นยำทิศทาง ${pct.toFixed(1)}% จาก ${n} ครั้ง`,
     vsBaseline: (pct: number) => `(เทียบกับ baseline ${pct.toFixed(1)}%)`,
@@ -596,54 +584,58 @@ export default async function DashboardPage() {
 
             {longTermTechnicals.available && (
               <div className="mt-5 pt-5 border-t border-v2-border">
-                <p className="text-sm font-semibold text-v2-foreground">{t.priceMaRsiTitle}</p>
-                <PriceMaRsiChart points={longTermTechnicals.priceStudy} locale={locale} />
-                <div className="mt-2 space-y-1 text-xs text-v2-muted leading-relaxed">
+                <p className="text-xs font-semibold text-v2-muted uppercase tracking-wide mb-2">{t.longTermLabel}</p>
+                <div className="space-y-1.5">
                   {longTermTechnicals.currentRsi14 !== null && (
-                    <p>
-                      {t.rsiNow(longTermTechnicals.currentRsi14)}
-                      {longTermTechnicals.currentRsi14 >= 70
-                        ? t.rsiOverboughtNote
-                        : longTermTechnicals.currentRsi14 <= 30
-                          ? t.rsiOversoldNote
-                          : t.rsiNeutralNote}
-                    </p>
+                    <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
+                      <span className="text-sm text-v2-muted">RSI(14) (3M)</span>
+                      <span className="font-mono text-sm font-semibold text-v2-foreground">{longTermTechnicals.currentRsi14.toFixed(1)}</span>
+                    </div>
+                  )}
+                  {longTermTechnicals.currentSma50 !== null && (
+                    <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
+                      <span className="text-sm text-v2-muted">MA50 (3M)</span>
+                      <span className="font-mono text-sm font-semibold text-v2-foreground">{longTermTechnicals.currentSma50.toFixed(4)}</span>
+                    </div>
+                  )}
+                  {longTermTechnicals.currentSma200 !== null && (
+                    <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
+                      <span className="text-sm text-v2-muted">MA200 (3M)</span>
+                      <span className="font-mono text-sm font-semibold text-v2-foreground">{longTermTechnicals.currentSma200.toFixed(4)}</span>
+                    </div>
                   )}
                   {longTermTechnicals.currentSma50 !== null && longTermTechnicals.currentSma200 !== null && (
-                    <p>
-                      {longTermTechnicals.maBias === "GOLDEN"
-                        ? t.maGolden(longTermTechnicals.currentSma50, longTermTechnicals.currentSma200)
-                        : t.maDeath(longTermTechnicals.currentSma50, longTermTechnicals.currentSma200)}
-                    </p>
+                    <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
+                      <span className="text-sm text-v2-muted">{t.maCrossLabel}</span>
+                      <span className={`text-sm font-semibold ${longTermTechnicals.maBias === "GOLDEN" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                        {longTermTechnicals.maBias === "GOLDEN" ? t.goldenCross : t.deathCross}
+                      </span>
+                    </div>
                   )}
-                  {longTermTechnicals.dataAsOfDate && <p>{t.asOf(longTermTechnicals.dataAsOfDate, longTermTechnicals.source)}</p>}
+                  {longTermTechnicals.currentMacd !== null && longTermTechnicals.currentSignal !== null && longTermTechnicals.currentHistogram !== null && (
+                    <>
+                      <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
+                        <span className="text-sm text-v2-muted">MACD (6M)</span>
+                        <span className="font-mono text-sm font-semibold text-v2-foreground">{longTermTechnicals.currentMacd.toFixed(4)}</span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
+                        <span className="text-sm text-v2-muted">Signal (6M)</span>
+                        <span className="font-mono text-sm font-semibold text-v2-foreground">{longTermTechnicals.currentSignal.toFixed(4)}</span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
+                        <span className="text-sm text-v2-muted">{t.macdSignalLabel}</span>
+                        <span className={`text-sm font-semibold ${longTermTechnicals.macdBias === "BULLISH" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                          {longTermTechnicals.macdBias === "BULLISH" ? t.bullish : t.bearish} ({longTermTechnicals.currentHistogram >= 0 ? "+" : ""}
+                          {longTermTechnicals.currentHistogram.toFixed(4)})
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
-              </div>
-            )}
-
-            {longTermTechnicals.available && (
-              <div className="mt-5 pt-5 border-t border-v2-border">
-                <p className="text-sm font-semibold text-v2-foreground">{t.macdTitle}</p>
-                {longTermTechnicals.macdStudy.length >= 2 && longTermTechnicals.currentMacd !== null && longTermTechnicals.currentSignal !== null && longTermTechnicals.currentHistogram !== null ? (
-                  <>
-                    <MacdChart points={longTermTechnicals.macdStudy} locale={locale} />
-                    <p
-                      className={`mt-2 text-xs leading-relaxed font-medium ${
-                        longTermTechnicals.macdBias === "BULLISH"
-                          ? "text-emerald-600 dark:text-emerald-400"
-                          : longTermTechnicals.macdBias === "BEARISH"
-                            ? "text-red-600 dark:text-red-400"
-                            : "text-v2-muted"
-                      }`}
-                    >
-                      {longTermTechnicals.macdBias === "BULLISH"
-                        ? t.macdBullish(longTermTechnicals.currentMacd, longTermTechnicals.currentSignal, longTermTechnicals.currentHistogram)
-                        : t.macdBearish(longTermTechnicals.currentMacd, longTermTechnicals.currentSignal, longTermTechnicals.currentHistogram)}
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-xs text-v2-muted mt-2">{t.macdNotEnough}</p>
-                )}
+                {longTermTechnicals.dataAsOfDate && <p className="text-[11px] text-v2-muted mt-2">{t.asOf(longTermTechnicals.dataAsOfDate, longTermTechnicals.source)}</p>}
+                <Link href="/analysis" className="inline-block mt-2 text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline">
+                  {t.seeChartsOnAnalysis} &rarr;
+                </Link>
               </div>
             )}
           </Card>
