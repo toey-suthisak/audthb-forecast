@@ -74,7 +74,12 @@ const STR = {
     support3: "Support 3",
     pivotExplain: (basedOn: string, high: number, low: number, close: number, value: number) =>
       `The Pivot Point is the average of the previous completed day's (${basedOn}) high (${high.toFixed(4)}), low (${low.toFixed(4)}) and close (${close.toFixed(4)}) -- right now that's ${value.toFixed(4)}.`,
-    longTermLabel: "Longer-term (RBA F11.1 daily)",
+    longTermLabel: "Longer-Term Signals",
+    rsi14Label: "RSI(14) (3M)",
+    ma50Label: "MA50 (3M)",
+    ma200Label: "MA200 (3M)",
+    macdLabel: "MACD (6M)",
+    signalLabel: "Signal (6M)",
     maCrossLabel: "MA50/MA200 cross",
     goldenCross: "Golden Cross",
     deathCross: "Death Cross",
@@ -102,6 +107,7 @@ const STR = {
       priceTechnical: "Daily-bar price history for AUD/THB with classic pivot support/resistance levels computed from the last completed day.",
       technicalLevels: "Classic floor-trader pivot points (Pivot, R1-R2, S1-S2) computed from the most recently completed day's high/low/close.",
       technicalSignals: "Simple moving averages and RSI computed from this app's own real daily price history -- periods shrink automatically while less history exists.",
+      longTermLabel: "RSI(14), MA50/MA200 and MACD computed over the real RBA F11.1 daily AUD/THB series (2023 onward) -- a different, longer real source than the live intraday feed used elsewhere on this page. Full charts on the Analysis tab.",
       forecast: "This app's own rule-based price forecast per horizon (still UNCALIBRATED), shown with its real directional-accuracy track record vs. a naive baseline.",
       scoreBreakdown: "How each of the 7 weighted factors contributed to the Core FX Score above -- contributions sum to the total score exactly.",
       upcoming: "MEDIUM/HIGH-impact AUD/USD/THB economic events scheduled for today, with their forecast and previous values.",
@@ -147,7 +153,12 @@ const STR = {
     support3: "แนวรับ 3",
     pivotExplain: (basedOn: string, high: number, low: number, close: number, value: number) =>
       `จุดหมุน (Pivot) คือค่าเฉลี่ยของราคาสูงสุด (${high.toFixed(4)}) ต่ำสุด (${low.toFixed(4)}) และปิด (${close.toFixed(4)}) ของวันก่อนหน้าที่สมบูรณ์แล้ว (${basedOn}) -- ตอนนี้คือ ${value.toFixed(4)}`,
-    longTermLabel: "ระยะยาว (RBA F11.1 รายวัน)",
+    longTermLabel: "สัญญาณระยะยาว (RBA F11.1 รายวัน)",
+    rsi14Label: "RSI(14) (3 เดือน)",
+    ma50Label: "MA50 (3 เดือน)",
+    ma200Label: "MA200 (3 เดือน)",
+    macdLabel: "MACD (6 เดือน)",
+    signalLabel: "Signal (6 เดือน)",
     maCrossLabel: "MA50/MA200 cross",
     goldenCross: "Golden Cross",
     deathCross: "Death Cross",
@@ -175,6 +186,7 @@ const STR = {
       priceTechnical: "ราคา AUD/THB รายวันจริง พร้อมแนวรับ-แนวต้าน (pivot) แบบคลาสสิกที่คำนวณจากวันล่าสุดที่ข้อมูลสมบูรณ์แล้ว",
       technicalLevels: "จุด pivot แบบคลาสสิก (Pivot, R1-R2, S1-S2) คำนวณจากราคาสูงสุด/ต่ำสุด/ปิดของวันล่าสุดที่สมบูรณ์แล้ว",
       technicalSignals: "เส้นค่าเฉลี่ยเคลื่อนที่และ RSI คำนวณจากข้อมูลราคารายวันจริงของระบบนี้ -- ช่วงเวลาจะปรับลดอัตโนมัติขณะที่ข้อมูลย้อนหลังยังมีไม่มาก",
+      longTermLabel: "RSI(14), MA50/MA200 และ MACD คำนวณจากราคา AUD/THB รายวันจริงของ RBA F11.1 (ตั้งแต่ปี 2023) -- คนละแหล่งข้อมูลกับฟีดเรียลไทม์ที่ใช้ในส่วนอื่นของหน้านี้ ดูกราฟเต็มได้ที่แท็บวิเคราะห์",
       forecast: "คาดการณ์ราคาตามกฎของระบบนี้เอง (ยัง UNCALIBRATED) แสดงพร้อมสถิติความแม่นยำทิศทางจริงเทียบกับ baseline",
       scoreBreakdown: "แต่ละ 7 ปัจจัยถ่วงน้ำหนักส่งผลต่อ Core FX Score ด้านบนอย่างไร -- ผลรวมของ contribution เท่ากับคะแนนรวมพอดี",
       upcoming: "ข่าวเศรษฐกิจผลกระทบปานกลาง/สูงของ AUD/USD/THB ที่มีกำหนดวันนี้ พร้อมค่าคาดการณ์และค่าครั้งก่อน",
@@ -581,66 +593,52 @@ export default async function DashboardPage() {
                 </div>
               )}
             </div>
-
-            {longTermTechnicals.available && (
-              <div className="mt-5 pt-5 border-t border-v2-border">
-                <p className="text-xs font-semibold text-v2-muted uppercase tracking-wide mb-2">{t.longTermLabel}</p>
-                <div className="space-y-1.5">
-                  {longTermTechnicals.currentRsi14 !== null && (
-                    <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
-                      <span className="text-sm text-v2-muted">RSI(14) (3M)</span>
-                      <span className="font-mono text-sm font-semibold text-v2-foreground">{longTermTechnicals.currentRsi14.toFixed(1)}</span>
-                    </div>
-                  )}
-                  {longTermTechnicals.currentSma50 !== null && (
-                    <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
-                      <span className="text-sm text-v2-muted">MA50 (3M)</span>
-                      <span className="font-mono text-sm font-semibold text-v2-foreground">{longTermTechnicals.currentSma50.toFixed(4)}</span>
-                    </div>
-                  )}
-                  {longTermTechnicals.currentSma200 !== null && (
-                    <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
-                      <span className="text-sm text-v2-muted">MA200 (3M)</span>
-                      <span className="font-mono text-sm font-semibold text-v2-foreground">{longTermTechnicals.currentSma200.toFixed(4)}</span>
-                    </div>
-                  )}
-                  {longTermTechnicals.currentSma50 !== null && longTermTechnicals.currentSma200 !== null && (
-                    <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
-                      <span className="text-sm text-v2-muted">{t.maCrossLabel}</span>
-                      <span className={`text-sm font-semibold ${longTermTechnicals.maBias === "GOLDEN" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
-                        {longTermTechnicals.maBias === "GOLDEN" ? t.goldenCross : t.deathCross}
-                      </span>
-                    </div>
-                  )}
-                  {longTermTechnicals.currentMacd !== null && longTermTechnicals.currentSignal !== null && longTermTechnicals.currentHistogram !== null && (
-                    <>
-                      <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
-                        <span className="text-sm text-v2-muted">MACD (6M)</span>
-                        <span className="font-mono text-sm font-semibold text-v2-foreground">{longTermTechnicals.currentMacd.toFixed(4)}</span>
-                      </div>
-                      <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
-                        <span className="text-sm text-v2-muted">Signal (6M)</span>
-                        <span className="font-mono text-sm font-semibold text-v2-foreground">{longTermTechnicals.currentSignal.toFixed(4)}</span>
-                      </div>
-                      <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
-                        <span className="text-sm text-v2-muted">{t.macdSignalLabel}</span>
-                        <span className={`text-sm font-semibold ${longTermTechnicals.macdBias === "BULLISH" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
-                          {longTermTechnicals.macdBias === "BULLISH" ? t.bullish : t.bearish} ({longTermTechnicals.currentHistogram >= 0 ? "+" : ""}
-                          {longTermTechnicals.currentHistogram.toFixed(4)})
-                        </span>
-                      </div>
-                    </>
-                  )}
-                </div>
-                {longTermTechnicals.dataAsOfDate && <p className="text-[11px] text-v2-muted mt-2">{t.asOf(longTermTechnicals.dataAsOfDate, longTermTechnicals.source)}</p>}
-                <Link href="/analysis" className="inline-block mt-2 text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline">
-                  {t.seeChartsOnAnalysis} &rarr;
-                </Link>
-              </div>
-            )}
           </Card>
         </div>
       </div>
+
+      {/* Row 2.5: Longer-term signals (RBA F11.1, 3M/6M) -- own card so it
+          doesn't stretch Technical Signals out of balance with Technical
+          Levels above; horizontal tiles instead of a tall vertical list. */}
+      {longTermTechnicals.available && (
+        <Card
+          icon={<IconPulse className={ICON_CLASS} />}
+          title={
+            <span className="flex items-center gap-1.5">
+              {t.longTermLabel}
+              <InfoTooltip text={t.tip.longTermLabel} />
+            </span>
+          }
+        >
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {longTermTechnicals.currentRsi14 !== null && <StatTile label={t.rsi14Label} value={longTermTechnicals.currentRsi14.toFixed(1)} />}
+            {longTermTechnicals.currentSma50 !== null && <StatTile label={t.ma50Label} value={longTermTechnicals.currentSma50.toFixed(4)} />}
+            {longTermTechnicals.currentSma200 !== null && <StatTile label={t.ma200Label} value={longTermTechnicals.currentSma200.toFixed(4)} />}
+            {longTermTechnicals.currentSma50 !== null && longTermTechnicals.currentSma200 !== null && (
+              <StatTile
+                label={t.maCrossLabel}
+                value={longTermTechnicals.maBias === "GOLDEN" ? t.goldenCross : t.deathCross}
+                valueClass={longTermTechnicals.maBias === "GOLDEN" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}
+              />
+            )}
+            {longTermTechnicals.currentMacd !== null && <StatTile label={t.macdLabel} value={longTermTechnicals.currentMacd.toFixed(4)} />}
+            {longTermTechnicals.currentSignal !== null && <StatTile label={t.signalLabel} value={longTermTechnicals.currentSignal.toFixed(4)} />}
+            {longTermTechnicals.currentHistogram !== null && (
+              <StatTile
+                label={t.macdSignalLabel}
+                value={`${longTermTechnicals.macdBias === "BULLISH" ? t.bullish : t.bearish} (${longTermTechnicals.currentHistogram >= 0 ? "+" : ""}${longTermTechnicals.currentHistogram.toFixed(4)})`}
+                valueClass={longTermTechnicals.macdBias === "BULLISH" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}
+              />
+            )}
+          </div>
+          <div className="flex items-center justify-between flex-wrap gap-2 mt-3 pt-3 border-t border-v2-border">
+            {longTermTechnicals.dataAsOfDate && <p className="text-[11px] text-v2-muted">{t.asOf(longTermTechnicals.dataAsOfDate, longTermTechnicals.source)}</p>}
+            <Link href="/analysis" className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline whitespace-nowrap">
+              {t.seeChartsOnAnalysis} &rarr;
+            </Link>
+          </div>
+        </Card>
+      )}
 
       {/* Row 3: Forecast | Score Breakdown */}
       <div className="grid lg:grid-cols-2 gap-6">

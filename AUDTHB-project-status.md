@@ -1096,3 +1096,30 @@ renders both charts with the same real values (RSI 44.4, MA50
 23.5346, MA200 22.6754) the Dashboard shows as plain numbers --
 confirming both pages read the same underlying data. `npx tsc --noEmit`
 and `npx next build` both pass clean.
+
+## Dashboard layout rebalance: longer-term signals get their own card (2026-09-22, same day)
+
+User asked to tidy up the Dashboard layout. Screenshotted the live
+page first rather than guessing: the 7 long-term number rows bolted
+onto the bottom of Technical Signals (previous round) made that card
+far taller than its neighbor, Technical Levels -- leaving a large dead
+gap next to the Price & Technical chart in the row above, since a CSS
+grid row's height follows its tallest column.
+
+Fix: pulled that section out of Technical Signals into its own new
+full-width card ("สัญญาณระยะยาว", right after the chart/Levels/Signals
+row), and changed it from a tall vertical list to a `grid-cols-2
+sm:grid-cols-4` row of `StatTile`s (RSI(14), MA50, MA200, MA50/MA200
+cross, MACD, Signal, MACD signal) -- the same tile shape already used
+elsewhere on this page (AUD/THB card, Price & Technical's stat row),
+so it reads as one consistent visual language rather than a bolted-on
+appendix. Technical Signals reverted to just its original 4 short-term
+rows. Also gave the long-term labels real Thai translations (was a mix
+of hardcoded English abbreviations) and kept the real "as of" source
+line + link to Analysis's full charts.
+
+Verified live at 1200px: Technical Levels and Technical Signals now
+end at almost the same height as the chart card beside them (no more
+large dead-space gap); the new card's tile grid reads cleanly. Checked
+375px mobile: 2-column tile grid, no overflow. `npx tsc --noEmit` and
+`npx next build` both pass clean.
