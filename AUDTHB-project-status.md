@@ -1005,3 +1005,67 @@ event risk today is 47.2h away (WATCH level, outside the 24h window)
 and Brent's staleness is a freshness-category alert now excluded from
 this popup by design. `npx tsc --noEmit` and `npx next build` both
 pass clean.
+
+## Real 3/6-month RSI(14)/MA50/MA200/MACD, and reworked Technical Levels (2026-09-22)
+
+User asked for a real 3-month AUD/THB chart with RSI(14)+MA50+MA200,
+a real 6-month MACD with its current bullish/bearish signal, both
+inside Technical Signals; and Technical Levels redone with full-word
+labels (no abbreviations), extended to R3/S3, and an explicit
+statement of what price the Pivot actually is.
+
+**The live TwelveData feed (`market_prices`) only has ~11 real days of
+AUD/THB history** (ingestion started 2026-09-11) -- nowhere near
+enough for a 200-day moving average or 6-month MACD, and fabricating
+that history was never on the table given this project's standing
+no-fabricated-data rule. Instead of inventing anything, found and
+reused `backtest_daily_rates` -- a real, already-vetted data source
+this app already uses for the Performance tab's Backtest: RBA's own
+official F11.1 daily AUD/THB reference rate, 2023-01-03 onward (934+
+real rows, topped up daily by `app/api/backtest-update`). A different
+real source than the live intraday feed (a daily official fixing, not
+tick data), so every new panel labels it explicitly ("RBA F11.1...
+คนละแหล่งกับฟีดเรียลไทม์ด้านบน") rather than silently blending two
+different feeds.
+
+- New `lib/long-term-technicals-data.ts`: fetches the full real
+  `backtest_daily_rates` series, computes SMA50/SMA200/RSI(14) (same
+  simple-average RSI formula as `technical-outlook-data.ts`, for
+  consistency) and MACD(12,26,9) over the **full** real history first
+  (so MA200/EMA26 have genuine lookback), then slices the resulting
+  series down to the real last-3-months / last-6-months calendar
+  window for display -- never sliced-then-computed, which would
+  silently null out indicators a longer real window actually supports.
+  Returns current values plus a real Golden-Cross/Death-Cross bias
+  (SMA50 vs SMA200) and a real MACD bullish/bearish bias (histogram
+  sign).
+- New hand-rolled SVG charts (same no-library convention as
+  `RangeChart`/`Sparkline`): `components/v2/PriceMaRsiChart.tsx`
+  (stacked price+MA50+MA200 panel over an RSI oscillator panel with
+  70/30 reference lines) and `components/v2/MacdChart.tsx` (MACD line
+  + signal line + histogram bars around a zero baseline).
+- Both mounted inside the Dashboard's Technical Signals card, below
+  the existing short-term SMA(5)/RSI(10) rows (which stay, computed
+  from the live feed's ~11 real days) -- clearly separated and
+  independently sourced, with real narrative sentences ("RSI(14) is
+  currently X (overbought/oversold/neutral)", "MA50 above MA200 --
+  Golden Cross", "MACD signal is currently POSITIVE/NEGATIVE --
+  MACD line X above/below Signal Y, histogram Z").
+- **Technical Levels reworked**: `PivotLevels` (in
+  `technical-outlook-data.ts`) now also carries the real high/low/close
+  of the pivot's own basis day (`basedOnHigh/Low/Close`), not just the
+  computed levels -- needed to literally answer "what price is the
+  pivot." The card's 5 abbreviated rows (R2/R1/Pivot/S1/S2) became 7
+  full-word rows (แนวต้าน 3/2/1, จุดหมุน (Pivot), แนวรับ 1/2/3), plus a
+  caption stating the real formula with real numbers: "จุดหมุน (Pivot)
+  คือค่าเฉลี่ยของราคาสูงสุด (H) ต่ำสุด (L) และปิด (C) ของวันก่อนหน้าที่
+  สมบูรณ์แล้ว (date) -- ตอนนี้คือ (value)".
+
+Verified live: MA50 cross-checked directly against Supabase
+(`avg(aud_thb) over the last 50 rows` = 23.5346, matching the app
+exactly); RSI(14)/MA50/MA200 chart correctly spans 2026-06-22 to
+2026-09-21 (3 real months) and MACD spans 2026-03-23 to 2026-09-21 (6
+real months); current real reading was MA50 above MA200 (Golden
+Cross) and MACD histogram negative (Bearish, MACD 0.0684 below Signal
+0.0794). Confirmed no horizontal overflow at 375px mobile. `npx tsc
+--noEmit` and `npx next build` both pass clean.

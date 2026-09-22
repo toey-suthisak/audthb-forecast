@@ -204,6 +204,12 @@ export type PivotLevels = {
   s2: number;
   s3: number;
   basedOnDate: string;
+  // The real high/low/close the pivot itself was averaged from -- kept
+  // alongside the levels so a UI can state "pivot = (H+L+C)/3 of this
+  // real day" with real numbers, not just the abstract formula.
+  basedOnHigh: number;
+  basedOnLow: number;
+  basedOnClose: number;
 };
 
 export type PricePoint = { date: string; close: number; smaShort: number | null };
@@ -317,6 +323,9 @@ function classicPivots(bar: DailyBar): PivotLevels {
     s2: pivot - range,
     s3: bar.low - 2 * (bar.high - pivot),
     basedOnDate: bar.date,
+    basedOnHigh: bar.high,
+    basedOnLow: bar.low,
+    basedOnClose: bar.close,
   };
 }
 
@@ -646,6 +655,9 @@ export async function getTechnicalOutlook(
       s2: round(pivots.s2),
       s3: round(pivots.s3),
       basedOnDate: pivots.basedOnDate,
+      basedOnHigh: round(pivots.basedOnHigh),
+      basedOnLow: round(pivots.basedOnLow),
+      basedOnClose: round(pivots.basedOnClose),
     },
     swingHigh: round(swingHigh),
     swingLow: round(swingLow),

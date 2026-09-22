@@ -6,6 +6,8 @@ import WatchlistRow from "@/components/v2/WatchlistRow";
 import InfoTooltip from "@/components/v2/InfoTooltip";
 import CautionToast from "@/components/v2/CautionToast";
 import ScoreGauge from "@/components/v2/ScoreGauge";
+import PriceMaRsiChart from "@/components/v2/PriceMaRsiChart";
+import MacdChart from "@/components/v2/MacdChart";
 import {
   IconExchange,
   IconGauge,
@@ -26,6 +28,7 @@ import { getDecisionSnapshot } from "@/lib/decision-snapshot-data";
 import { getAlerts } from "@/lib/alerts-data";
 import { getRelatedMarkets } from "@/lib/watchlist-data";
 import { getEconomicConsensus } from "@/lib/economic-consensus-data";
+import { getLongTermTechnicals } from "@/lib/long-term-technicals-data";
 import { computeContributions, rawFactorsFromDashboard, type FactorKey } from "@/lib/score-factors";
 import type { ChipTone } from "@/components/v2/BadgeChip";
 
@@ -64,6 +67,29 @@ const STR = {
     belowSma: (n: number) => `Below SMA(${n})`,
     smaCrossUp: (s: number, l: number) => `SMA(${s}) > SMA(${l})`,
     smaCrossDown: (s: number, l: number) => `SMA(${s}) < SMA(${l})`,
+    resistance3: "Resistance 3",
+    resistance2: "Resistance 2",
+    resistance1: "Resistance 1",
+    pivotPoint: "Pivot Point",
+    support1: "Support 1",
+    support2: "Support 2",
+    support3: "Support 3",
+    pivotExplain: (basedOn: string, high: number, low: number, close: number, value: number) =>
+      `The Pivot Point is the average of the previous completed day's (${basedOn}) high (${high.toFixed(4)}), low (${low.toFixed(4)}) and close (${close.toFixed(4)}) -- right now that's ${value.toFixed(4)}.`,
+    priceMaRsiTitle: "RSI(14) & MA50/MA200 -- 3 months",
+    macdTitle: "MACD -- 6 months",
+    asOf: (date: string, source: string) => `Real daily data as of ${date}, from ${source} -- a different source than the live intraday feed above.`,
+    rsiNow: (v: number) => `RSI(14) is currently ${v.toFixed(1)}`,
+    rsiOverboughtNote: " (overbought territory).",
+    rsiOversoldNote: " (oversold territory).",
+    rsiNeutralNote: " (no extreme in either direction).",
+    maGolden: (s: number, l: number) => `MA50 (${s.toFixed(4)}) is above MA200 (${l.toFixed(4)}) -- a "Golden Cross," a long-term bullish signal.`,
+    maDeath: (s: number, l: number) => `MA50 (${s.toFixed(4)}) is below MA200 (${l.toFixed(4)}) -- a "Death Cross," a long-term bearish signal.`,
+    macdBullish: (macd: number, sig: number, hist: number) =>
+      `MACD signal is currently POSITIVE (bullish) -- the MACD line (${macd.toFixed(4)}) is above the Signal line (${sig.toFixed(4)}), histogram +${hist.toFixed(4)}.`,
+    macdBearish: (macd: number, sig: number, hist: number) =>
+      `MACD signal is currently NEGATIVE (bearish) -- the MACD line (${macd.toFixed(4)}) is below the Signal line (${sig.toFixed(4)}), histogram ${hist.toFixed(4)}.`,
+    macdNotEnough: "Not enough real RBA F11.1 history yet to compute MACD.",
     forecast: "Forecast",
     directionalAccuracy: (pct: number, n: number) => `${pct.toFixed(1)}% directional accuracy from ${n} runs`,
     vsBaseline: (pct: number) => `(vs. baseline ${pct.toFixed(1)}%)`,
@@ -119,6 +145,29 @@ const STR = {
     belowSma: (n: number) => `ใต้ SMA(${n})`,
     smaCrossUp: (s: number, l: number) => `SMA(${s}) > SMA(${l})`,
     smaCrossDown: (s: number, l: number) => `SMA(${s}) < SMA(${l})`,
+    resistance3: "แนวต้าน 3",
+    resistance2: "แนวต้าน 2",
+    resistance1: "แนวต้าน 1",
+    pivotPoint: "จุดหมุน (Pivot)",
+    support1: "แนวรับ 1",
+    support2: "แนวรับ 2",
+    support3: "แนวรับ 3",
+    pivotExplain: (basedOn: string, high: number, low: number, close: number, value: number) =>
+      `จุดหมุน (Pivot) คือค่าเฉลี่ยของราคาสูงสุด (${high.toFixed(4)}) ต่ำสุด (${low.toFixed(4)}) และปิด (${close.toFixed(4)}) ของวันก่อนหน้าที่สมบูรณ์แล้ว (${basedOn}) -- ตอนนี้คือ ${value.toFixed(4)}`,
+    priceMaRsiTitle: "RSI(14) และ MA50/MA200 -- ย้อนหลัง 3 เดือน",
+    macdTitle: "MACD -- ย้อนหลัง 6 เดือน",
+    asOf: (date: string, source: string) => `ข้อมูลรายวันจริง ณ วันที่ ${date} จาก ${source} -- คนละแหล่งกับฟีดเรียลไทม์ด้านบน`,
+    rsiNow: (v: number) => `RSI(14) ตอนนี้อยู่ที่ ${v.toFixed(1)}`,
+    rsiOverboughtNote: " (โซน overbought)",
+    rsiOversoldNote: " (โซน oversold)",
+    rsiNeutralNote: " (ยังไม่สุดโต่งไปทางใด)",
+    maGolden: (s: number, l: number) => `MA50 (${s.toFixed(4)}) อยู่เหนือ MA200 (${l.toFixed(4)}) -- เรียกว่า "Golden Cross" สัญญาณขาขึ้นระยะยาว`,
+    maDeath: (s: number, l: number) => `MA50 (${s.toFixed(4)}) อยู่ใต้ MA200 (${l.toFixed(4)}) -- เรียกว่า "Death Cross" สัญญาณขาลงระยะยาว`,
+    macdBullish: (macd: number, sig: number, hist: number) =>
+      `สัญญาณ MACD ตอนนี้เป็นบวก (Bullish) -- เส้น MACD (${macd.toFixed(4)}) อยู่เหนือเส้น Signal (${sig.toFixed(4)}), Histogram +${hist.toFixed(4)}`,
+    macdBearish: (macd: number, sig: number, hist: number) =>
+      `สัญญาณ MACD ตอนนี้เป็นลบ (Bearish) -- เส้น MACD (${macd.toFixed(4)}) อยู่ใต้เส้น Signal (${sig.toFixed(4)}), Histogram ${hist.toFixed(4)}`,
+    macdNotEnough: "ข้อมูล RBA F11.1 ย้อนหลังยังไม่พอสำหรับคำนวณ MACD",
     forecast: "คาดการณ์ราคา",
     directionalAccuracy: (pct: number, n: number) => `ความแม่นยำทิศทาง ${pct.toFixed(1)}% จาก ${n} ครั้ง`,
     vsBaseline: (pct: number) => `(เทียบกับ baseline ${pct.toFixed(1)}%)`,
@@ -236,12 +285,13 @@ export default async function DashboardPage() {
   const t = STR[locale];
 
   const data = await getDashboardData();
-  const [technicalOutlook, decisionSnapshot, allAlerts, relatedMarkets, consensus] = await Promise.all([
+  const [technicalOutlook, decisionSnapshot, allAlerts, relatedMarkets, consensus, longTermTechnicals] = await Promise.all([
     getTechnicalOutlook(locale, data),
     getDecisionSnapshot(data, locale),
     getAlerts(data, locale),
     getRelatedMarkets(data),
     getEconomicConsensus(),
+    getLongTermTechnicals(locale),
   ]);
 
   // Caution popup: only real event/news warnings, both already scoped
@@ -458,21 +508,34 @@ export default async function DashboardPage() {
             }
           >
             {technicalOutlook.pivots ? (
-              <div className="space-y-1.5">
-                {[
-                  { label: "R2", value: technicalOutlook.pivots.r2, cls: "text-red-600 dark:text-red-400", bar: "bg-red-500" },
-                  { label: "R1", value: technicalOutlook.pivots.r1, cls: "text-red-600 dark:text-red-400", bar: "bg-red-400" },
-                  { label: "Pivot", value: technicalOutlook.pivots.pivot, cls: "text-v2-foreground", bar: "bg-slate-400 dark:bg-slate-500" },
-                  { label: "S1", value: technicalOutlook.pivots.s1, cls: "text-emerald-600 dark:text-emerald-400", bar: "bg-emerald-400" },
-                  { label: "S2", value: technicalOutlook.pivots.s2, cls: "text-emerald-600 dark:text-emerald-400", bar: "bg-emerald-500" },
-                ].map((row) => (
-                  <div key={row.label} className="flex items-center gap-3 rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
-                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${row.bar}`} />
-                    <span className="text-sm text-v2-muted flex-1">{row.label}</span>
-                    <span className={`font-mono text-sm font-semibold ${row.cls}`}>{row.value.toFixed(4)}</span>
-                  </div>
-                ))}
-              </div>
+              <>
+                <div className="space-y-1.5">
+                  {[
+                    { label: t.resistance3, value: technicalOutlook.pivots.r3, cls: "text-red-600 dark:text-red-400", bar: "bg-red-600" },
+                    { label: t.resistance2, value: technicalOutlook.pivots.r2, cls: "text-red-600 dark:text-red-400", bar: "bg-red-500" },
+                    { label: t.resistance1, value: technicalOutlook.pivots.r1, cls: "text-red-600 dark:text-red-400", bar: "bg-red-400" },
+                    { label: t.pivotPoint, value: technicalOutlook.pivots.pivot, cls: "text-v2-foreground", bar: "bg-slate-400 dark:bg-slate-500" },
+                    { label: t.support1, value: technicalOutlook.pivots.s1, cls: "text-emerald-600 dark:text-emerald-400", bar: "bg-emerald-400" },
+                    { label: t.support2, value: technicalOutlook.pivots.s2, cls: "text-emerald-600 dark:text-emerald-400", bar: "bg-emerald-500" },
+                    { label: t.support3, value: technicalOutlook.pivots.s3, cls: "text-emerald-600 dark:text-emerald-400", bar: "bg-emerald-600" },
+                  ].map((row) => (
+                    <div key={row.label} className="flex items-center gap-3 rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
+                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${row.bar}`} />
+                      <span className="text-sm text-v2-muted flex-1">{row.label}</span>
+                      <span className={`font-mono text-sm font-semibold ${row.cls}`}>{row.value.toFixed(4)}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-v2-muted mt-3 pt-3 border-t border-v2-border leading-relaxed">
+                  {t.pivotExplain(
+                    technicalOutlook.pivots.basedOnDate,
+                    technicalOutlook.pivots.basedOnHigh,
+                    technicalOutlook.pivots.basedOnLow,
+                    technicalOutlook.pivots.basedOnClose,
+                    technicalOutlook.pivots.pivot,
+                  )}
+                </p>
+              </>
             ) : (
               <p className="text-sm text-v2-muted">{technicalOutlook.disclaimer}</p>
             )}
@@ -530,6 +593,59 @@ export default async function DashboardPage() {
                 </div>
               )}
             </div>
+
+            {longTermTechnicals.available && (
+              <div className="mt-5 pt-5 border-t border-v2-border">
+                <p className="text-sm font-semibold text-v2-foreground">{t.priceMaRsiTitle}</p>
+                <PriceMaRsiChart points={longTermTechnicals.priceStudy} locale={locale} />
+                <div className="mt-2 space-y-1 text-xs text-v2-muted leading-relaxed">
+                  {longTermTechnicals.currentRsi14 !== null && (
+                    <p>
+                      {t.rsiNow(longTermTechnicals.currentRsi14)}
+                      {longTermTechnicals.currentRsi14 >= 70
+                        ? t.rsiOverboughtNote
+                        : longTermTechnicals.currentRsi14 <= 30
+                          ? t.rsiOversoldNote
+                          : t.rsiNeutralNote}
+                    </p>
+                  )}
+                  {longTermTechnicals.currentSma50 !== null && longTermTechnicals.currentSma200 !== null && (
+                    <p>
+                      {longTermTechnicals.maBias === "GOLDEN"
+                        ? t.maGolden(longTermTechnicals.currentSma50, longTermTechnicals.currentSma200)
+                        : t.maDeath(longTermTechnicals.currentSma50, longTermTechnicals.currentSma200)}
+                    </p>
+                  )}
+                  {longTermTechnicals.dataAsOfDate && <p>{t.asOf(longTermTechnicals.dataAsOfDate, longTermTechnicals.source)}</p>}
+                </div>
+              </div>
+            )}
+
+            {longTermTechnicals.available && (
+              <div className="mt-5 pt-5 border-t border-v2-border">
+                <p className="text-sm font-semibold text-v2-foreground">{t.macdTitle}</p>
+                {longTermTechnicals.macdStudy.length >= 2 && longTermTechnicals.currentMacd !== null && longTermTechnicals.currentSignal !== null && longTermTechnicals.currentHistogram !== null ? (
+                  <>
+                    <MacdChart points={longTermTechnicals.macdStudy} locale={locale} />
+                    <p
+                      className={`mt-2 text-xs leading-relaxed font-medium ${
+                        longTermTechnicals.macdBias === "BULLISH"
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : longTermTechnicals.macdBias === "BEARISH"
+                            ? "text-red-600 dark:text-red-400"
+                            : "text-v2-muted"
+                      }`}
+                    >
+                      {longTermTechnicals.macdBias === "BULLISH"
+                        ? t.macdBullish(longTermTechnicals.currentMacd, longTermTechnicals.currentSignal, longTermTechnicals.currentHistogram)
+                        : t.macdBearish(longTermTechnicals.currentMacd, longTermTechnicals.currentSignal, longTermTechnicals.currentHistogram)}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-xs text-v2-muted mt-2">{t.macdNotEnough}</p>
+                )}
+              </div>
+            )}
           </Card>
         </div>
       </div>
