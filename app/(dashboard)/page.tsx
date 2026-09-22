@@ -236,13 +236,21 @@ export default async function DashboardPage() {
   const t = STR[locale];
 
   const data = await getDashboardData();
-  const [technicalOutlook, decisionSnapshot, alerts, relatedMarkets, consensus] = await Promise.all([
+  const [technicalOutlook, decisionSnapshot, allAlerts, relatedMarkets, consensus] = await Promise.all([
     getTechnicalOutlook(locale, data),
     getDecisionSnapshot(data, locale),
     getAlerts(data, locale),
     getRelatedMarkets(data),
     getEconomicConsensus(),
   ]);
+
+  // Caution popup: only real event/news warnings, both already scoped
+  // to a real "happens within 24h" window (event-risk's HIGH level,
+  // news-signal's ~13h recency) -- per the user's explicit ask.
+  // Data-freshness/yield/macro alerts are ongoing data-quality issues
+  // with no "happens by" time of their own, so they're left out of this
+  // popup (still surfaced on /classic, which shows the full list).
+  const alerts = allAlerts.filter((a) => a.category === "event" || a.category === "news");
 
   // Today (Bangkok) only, per the user's request -- same bangkokDateKey
   // convention already used in lib/watchlist-data.ts for bucketing by

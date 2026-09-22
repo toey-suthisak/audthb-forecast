@@ -14,8 +14,16 @@ import { tLabel, type Locale } from "@/lib/i18n";
 
 export type AlertSeverity = "critical" | "warning";
 
+// Lets a caller (e.g. the Dashboard tab's Caution popup) show only a
+// subset of these -- "event"/"news" are inherently time-bound (already
+// scoped to a real window below), while "freshness"/"yield"/"macro"
+// describe an ongoing data-quality problem with no future "happens by"
+// time of their own.
+export type AlertCategory = "freshness" | "yield" | "macro" | "event" | "news";
+
 export type Alert = {
   severity: AlertSeverity;
+  category: AlertCategory;
   label: string;
   detail: string;
 };
@@ -23,8 +31,7 @@ export type Alert = {
 const STR = {
   en: {
     missing: "No data returned at all -- the feed or its ingest job is not producing rows.",
-    stale: (age: string) => `Data is stale (${age}) -- ingest cron may have failed, or the provider stopped responding.`,
-    ageOld: (v: number, unit: string) => `${v} ${unit} old`,
+    stale: (age: string) => `Data is stale (${age} old) -- ingest cron may have failed, or the provider stopped responding.`,
     ageUnknown: "age unknown",
     yieldStale: (status: string, gap: string) =>
       `Yield spread data is ${status} (gap: ${gap} days) -- DBnomics sync may have failed.`,
@@ -35,6 +42,7 @@ const STR = {
     newsLabel: (title: string) => `News Signal: ${title}`,
     min: "min",
     hr: "hr",
+    day: "day",
     labels: {
       direct: "AUD/THB direct",
       audUsd: "AUD/USD",
@@ -54,8 +62,7 @@ const STR = {
   },
   th: {
     missing: "ไม่มีข้อมูลส่งกลับมาเลย -- ฟีดหรือ ingest job ไม่ได้สร้างข้อมูล",
-    stale: (age: string) => `ข้อมูลเก่า (${age}) -- ingest cron อาจล้มเหลว หรือผู้ให้บริการหยุดตอบสนอง`,
-    ageOld: (v: number, unit: string) => `${v} ${unit}ที่แล้ว`,
+    stale: (age: string) => `ข้อมูลเก่า (${age}ที่แล้ว) -- ingest cron อาจล้มเหลว หรือผู้ให้บริการหยุดตอบสนอง`,
     ageUnknown: "ไม่ทราบอายุข้อมูล",
     yieldStale: (status: string, gap: string) =>
       `ข้อมูลส่วนต่างผลตอบแทนพันธบัตร${status} (ห่างไป: ${gap} วัน) -- การซิงค์ DBnomics อาจล้มเหลว`,
@@ -66,6 +73,7 @@ const STR = {
     newsLabel: (title: string) => `สัญญาณข่าว: ${title}`,
     min: "นาที",
     hr: "ชม.",
+    day: "วัน",
     labels: {
       direct: "AUD/THB โดยตรง",
       audUsd: "AUD/USD",
@@ -85,26 +93,41 @@ const STR = {
   },
 } as const;
 
+// ageValue arrives as a raw floating-point diff (e.g. 1015.7717333333334
+// minutes) -- normalize to minutes regardless of the caller's unit, then
+// pick whichever unit reads cleanest and round it, instead of
+// interpolating the raw float straight into the message (the bug
+// reported: "1015.7717333333334 min old").
+function formatAge(ageValue: number, unit: "min" | "hr", t: (typeof STR)[Locale]): string {
+  const minutes = unit === "hr" ? ageValue * 60 : ageValue;
+  if (minutes < 60) return `${Math.round(minutes)} ${t.min}`;
+  const hours = minutes / 60;
+  if (hours < 48) return `${hours.toFixed(1)} ${t.hr}`;
+  return `${(hours / 24).toFixed(1)} ${t.day}`;
+}
+
 function freshnessAlert(
   label: string,
   status: FreshnessStatus | "FRESH" | "DELAYED" | "STALE" | "MISSING",
   ageValue: number | null,
   unit: "min" | "hr",
+  category: AlertCategory,
   t: (typeof STR)[Locale],
 ): Alert | null {
   if (status === "MISSING") {
     return {
       severity: "critical",
+      category,
       label,
       detail: t.missing,
     };
   }
 
   if (status === "STALE") {
-    const unitLabel = unit === "min" ? t.min : t.hr;
-    const age = ageValue !== null ? t.ageOld(ageValue, unitLabel) : t.ageUnknown;
+    const age = ageValue !== null ? formatAge(ageValue, unit, t) : t.ageUnknown;
     return {
       severity: "warning",
+      category,
       label,
       detail: t.stale(age),
     };
@@ -118,25 +141,26 @@ export async function getAlerts(data: DashboardData, locale: Locale = "th"): Pro
   const l = t.labels;
 
   const candidates: Array<Alert | null> = [
-    freshnessAlert(l.direct, data.directFreshness.status, data.directFreshness.ageMinutes, "min", t),
-    freshnessAlert(l.audUsd, data.audUsdFreshness.status, data.audUsdFreshness.ageMinutes, "min", t),
-    freshnessAlert(l.usdThb, data.usdThbFreshness.status, data.usdThbFreshness.ageMinutes, "min", t),
-    freshnessAlert(l.usdCnh, data.usdCnhFreshness.status, data.usdCnhFreshness.ageMinutes, "min", t),
-    freshnessAlert(l.usdSgd, data.usdSgdFreshness.status, data.usdSgdFreshness.ageMinutes, "min", t),
+    freshnessAlert(l.direct, data.directFreshness.status, data.directFreshness.ageMinutes, "min", "freshness", t),
+    freshnessAlert(l.audUsd, data.audUsdFreshness.status, data.audUsdFreshness.ageMinutes, "min", "freshness", t),
+    freshnessAlert(l.usdThb, data.usdThbFreshness.status, data.usdThbFreshness.ageMinutes, "min", "freshness", t),
+    freshnessAlert(l.usdCnh, data.usdCnhFreshness.status, data.usdCnhFreshness.ageMinutes, "min", "freshness", t),
+    freshnessAlert(l.usdSgd, data.usdSgdFreshness.status, data.usdSgdFreshness.ageMinutes, "min", "freshness", t),
 
-    freshnessAlert(l.gold, data.goldFreshness, data.goldAgeMinutes, "min", t),
-    freshnessAlert(l.brent, data.brentLiveFreshness, data.brentLiveAgeMinutes, "min", t),
-    freshnessAlert(l.ironOre, data.ironOreFreshness, data.ironOreAgeHours, "hr", t),
+    freshnessAlert(l.gold, data.goldFreshness, data.goldAgeMinutes, "min", "freshness", t),
+    freshnessAlert(l.brent, data.brentLiveFreshness, data.brentLiveAgeMinutes, "min", "freshness", t),
+    freshnessAlert(l.ironOre, data.ironOreFreshness, data.ironOreAgeHours, "hr", "freshness", t),
   ];
 
   // MARKET_CLOSED is an expected state for Risk/VIXY outside market hours -- not an alert.
   if (data.riskFreshness !== "MARKET_CLOSED") {
-    candidates.push(freshnessAlert(l.risk, data.riskFreshness, data.riskAgeMinutes, "min", t));
+    candidates.push(freshnessAlert(l.risk, data.riskFreshness, data.riskAgeMinutes, "min", "freshness", t));
   }
 
   if (data.yieldConfidence === "STALE" || data.yieldConfidence === "MISSING") {
     candidates.push({
       severity: data.yieldConfidence === "MISSING" ? "critical" : "warning",
+      category: "yield",
       label: l.yield,
       detail: t.yieldStale(tLabel(data.yieldConfidence, locale).toLowerCase(), String(data.yieldDataGapDays ?? "?")),
     });
@@ -157,6 +181,7 @@ export async function getAlerts(data: DashboardData, locale: Locale = "th"): Pro
     if (check.coverage === 0) {
       candidates.push({
         severity: "warning",
+        category: "macro",
         label: check.label,
         detail: t.macroNoData,
       });
@@ -180,6 +205,7 @@ export async function getAlerts(data: DashboardData, locale: Locale = "th"): Pro
         : `${eventRisk.hoursUntil.toFixed(1)} ${locale === "th" ? "ชม." : "h"}`;
     candidates.push({
       severity: eventRisk.level === "HIGH" ? "critical" : "warning",
+      category: "event",
       label: t.eventLabel(eventRisk.event.eventName),
       detail: t.eventDetail(eventRisk.event.currency, hoursLabel, tLabel(eventRisk.level, locale)),
     });
@@ -202,6 +228,7 @@ export async function getAlerts(data: DashboardData, locale: Locale = "th"): Pro
   if (recentHighImpact) {
     candidates.push({
       severity: "warning",
+      category: "news",
       label: t.newsLabel(recentHighImpact.title),
       detail: `${recentHighImpact.aiDirection.replace("_", " ")} -- ${recentHighImpact.aiRationale}`,
     });

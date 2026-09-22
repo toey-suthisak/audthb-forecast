@@ -968,3 +968,40 @@ Verified: `getComputedStyle` on the tooltip panel shows `opacity: 0`
 at rest and `opacity: 1` on a real (CDP-driven) hover, confirmed for
 multiple tooltips on the page. `npx tsc --noEmit` and `npx next build`
 both pass clean.
+
+## Fixed: ugly stale-data wording + Caution popup scoped to event/news only (2026-09-22)
+
+User flagged the Caution popup showing "Brent (live): Data is stale
+(1015.7717333333334 min old)" -- a raw unrounded float -- and asked
+that the popup only warn about events/news happening within 24h.
+
+1. **Wording fix**: `lib/alerts-data.ts`'s `ageOld()` interpolated the
+   raw `ageMinutes`/`ageHours` float straight into the message with no
+   rounding. Replaced with `formatAge()`, which normalizes to minutes
+   regardless of the caller's unit, then renders as whole minutes
+   (<60), one-decimal hours (<48h), or one-decimal days -- so the same
+   real staleness now reads "17.1 hr" instead of "1015.7717333333334
+   min". Applies everywhere `getAlerts()` is used (Dashboard's Caution
+   popup and `/classic`'s Alerts banner both benefit).
+2. **Caution popup scope**: added an `AlertCategory` field
+   ("freshness" | "yield" | "macro" | "event" | "news") to `Alert`, tagged
+   every candidate in `getAlerts()` accordingly (purely additive, no
+   behavior change for existing consumers), then filtered to only
+   `event`/`news` before passing to `CautionToast` in
+   `app/(dashboard)/page.tsx`. Both categories were already scoped to a
+   real "happens within" window from an earlier round (event-risk's
+   HIGH level = inside 24h, news-signal's ~13h recency) -- data-
+   freshness/yield/macro alerts describe an ongoing data-quality issue
+   with no future "happens by" time of their own, so per the user's ask
+   they no longer appear in this popup. `/classic`'s own Alerts banner
+   is unchanged (still shows the full unfiltered list -- that page
+   wasn't part of this ask).
+
+Verified live: `/classic`'s Alerts banner now reads "ข้อมูลเก่า (17.1
+ชม.ที่แล้ว)" for the real Brent staleness (cross-checked against
+Supabase: Brent's latest row is genuinely ~17h old); the Dashboard's
+Caution popup shows nothing right now, correctly, since the only real
+event risk today is 47.2h away (WATCH level, outside the 24h window)
+and Brent's staleness is a freshness-category alert now excluded from
+this popup by design. `npx tsc --noEmit` and `npx next build` both
+pass clean.
