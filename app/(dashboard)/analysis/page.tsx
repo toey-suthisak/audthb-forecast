@@ -5,6 +5,7 @@ import { getTechnicalOutlook } from "@/lib/technical-outlook-data";
 import { getScoreExplained } from "@/lib/score-explained-data";
 import { getCorrelations } from "@/lib/correlation-data";
 import { getLongTermTechnicals } from "@/lib/long-term-technicals-data";
+import { computeContributions, rawFactorsFromDashboard } from "@/lib/score-factors";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,8 @@ export default async function AnalysisPage() {
     getLongTermTechnicals(locale),
   ]);
 
+  const { factors: scoreFactors } = computeContributions(rawFactorsFromDashboard(data));
+
   return (
     <div className="space-y-6">
       <div>
@@ -42,6 +45,7 @@ export default async function AnalysisPage() {
         locale={locale}
         technicalOutlook={technicalOutlook}
         scoreExplained={scoreExplained}
+        scoreFactors={scoreFactors}
         correlations={correlations}
         longTermTechnicals={longTermTechnicals}
       />

@@ -12,8 +12,21 @@ import type { TechnicalOutlook } from "@/lib/technical-outlook-data";
 import type { ScoreExplained } from "@/lib/score-explained-data";
 import type { CorrelationRow } from "@/lib/correlation-data";
 import type { LongTermTechnicals } from "@/lib/long-term-technicals-data";
-import type { FactorKey } from "@/lib/score-factors";
+import type { FactorContribution, FactorKey } from "@/lib/score-factors";
 import type { Locale } from "@/lib/i18n";
+
+const MAX_FACTOR_WEIGHT = 35;
+
+function changeColorClass(value: number | null): string {
+  if (value === null || value === 0) return "text-v2-muted";
+  return value > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400";
+}
+
+function TrendArrow({ trend }: { trend: "up" | "down" | "flat" }) {
+  const symbol = trend === "up" ? "↑" : trend === "down" ? "↓" : "—";
+  const cls = trend === "up" ? "text-emerald-600 dark:text-emerald-400" : trend === "down" ? "text-red-600 dark:text-red-400" : "text-v2-muted";
+  return <span className={`text-sm leading-none ${cls}`}>{symbol}</span>;
+}
 
 const FACTOR_LABELS: Record<FactorKey, { en: string; th: string }> = {
   priceMomentum: { en: "Price / Momentum", th: "ราคา / โมเมนตัม" },
@@ -34,16 +47,27 @@ const STR = {
     drivers: "Drivers",
     technical: "Technical Levels & Signals",
     correlation: "Correlation",
-    dominantFactor: "What's driving today",
+    scoreBreakdown: "Score Breakdown",
+    dominantNote: (label: string, pct: number) => `Dominant factor today: ${label} (${pct.toFixed(0)}% of today's weighted score)`,
     mixed: "No single factor clearly dominates -- spread across several.",
     shareOfScore: (pct: number) => `${pct.toFixed(0)}% of today's weighted score`,
     whatChanged: "Why is it moving? (what changed vs. ~24h ago)",
     notEnoughAttribution: "Not enough history under the current model version to compare yet.",
     pivotBasis: (date: string) => `Based on ${date}'s close`,
     swingRange: (days: number) => `${days}-day range`,
-    trend: "Trend (SMA)",
-    momentum: "Momentum (RSI)",
     signalsLabel: "Signals",
+    resistance3: "Resistance 3",
+    resistance2: "Resistance 2",
+    resistance1: "Resistance 1",
+    pivotPoint: "Pivot Point",
+    support1: "Support 1",
+    support2: "Support 2",
+    support3: "Support 3",
+    trendShort: "Short-term trend",
+    aboveSma: (n: number) => `Above SMA(${n})`,
+    belowSma: (n: number) => `Below SMA(${n})`,
+    smaCrossUp: (s: number, l: number) => `SMA(${s}) > SMA(${l})`,
+    smaCrossDown: (s: number, l: number) => `SMA(${s}) < SMA(${l})`,
     corrNote: "Pearson correlation of daily % change vs. AUD/THB's own daily % change, over whatever real overlapping history exists.",
     notEnoughCorr: (min: number) => `Needs ${min}+ overlapping days of real history`,
     strong: "Strong",
@@ -74,28 +98,28 @@ const STR = {
         "RSI(14), MA50 and MA200 computed over the real RBA F11.1 daily AUD/THB series (2023 onward) -- a longer, independent real source than the live intraday feed used above. MA50/MA200 crossing is the classic 'Golden Cross' / 'Death Cross' long-term trend signal. This source was chosen because RBA's official daily reference rate is the only real series with enough history (900+ days) to compute a meaningful 50/200-day average.",
       macdTitle:
         "MACD = 12-day EMA minus 26-day EMA of the RBA daily series; the Signal line is a 9-day EMA of MACD itself. MACD above Signal (positive histogram) reads bullish, below reads bearish. Chosen because it's one of the most standard trend-momentum indicators, combining both in one number, and is fully reproducible from the same real daily closes used elsewhere on this page.",
-      dominantFactor:
-        "The FX Score is a weighted sum of 7 real signals; this shows which one currently contributes the largest share, and each factor's raw point contribution to today's total. Contributions are computed the exact same way the total score itself is built, so they always sum to it -- there's no separate 'explanation model' that could disagree with the real score.",
+      scoreBreakdown:
+        "The FX Score is a weighted sum of 7 real signals; this shows each factor's real weight, its raw point contribution to today's total, and which one currently dominates. Contributions are computed the exact same way the total score itself is built, so they always sum to it -- there's no separate 'explanation model' that could disagree with the real score.",
       whatChanged:
         "A rule-based, factor-by-factor comparison of the current FX Score snapshot against the snapshot from roughly 24 hours ago -- it states in plain language which real inputs moved and by how much, never a generated guess. Chosen over a free-text AI summary so every sentence here traces back to an actual stored number you could re-query yourself.",
       correlation:
         "Real Pearson correlation between AUD/THB's own daily % change and each other real market's daily % change, computed from this app's stored daily price bars (not the model's own factor weights). It matters because it's an independent, data-driven check of which markets actually move together with AUD/THB in practice -- separate from what the FX Score assumes. Requires 15+ real overlapping trading days per pair before showing a number, so it never reports a correlation computed on too few points to mean anything.",
     },
-    factorTip: {
+    factorNote: {
       priceMomentum:
-        "35% weight -- the largest factor. 1H/4H momentum from this project's own live AUD/THB feed. Weighted highest because it's the most direct, real-time signal of AUD/THB's own movement.",
+        "1H/4H momentum from this project's own live AUD/THB feed. Weighted highest (35%) because it's the most direct, real-time signal of AUD/THB's own movement.",
       crossCurrency:
-        "20% weight. AUD/USD x USD/THB (matched-time), a cross-check against the Direct feed above -- if the two diverge, that gap is itself informative.",
+        "AUD/USD x USD/THB (matched-time), a cross-check against the Direct feed above -- if the two diverge, that gap is itself informative.",
       relativeMarket:
-        "15% weight. AU-US 2Y yield spread, USD/CNH and USD/SGD -- proxies for regional risk appetite and rate differentials that tend to move AUD.",
+        "AU-US 2Y yield spread, USD/CNH and USD/SGD -- proxies for regional risk appetite and rate differentials that tend to move AUD.",
       commodity:
-        "8% weight. Iron Ore and Brent -- Australia's terms-of-trade link, since AUD often tracks commodity export prices.",
+        "Iron Ore and Brent -- Australia's terms-of-trade link, since AUD often tracks commodity export prices.",
       meanReversion:
-        "5% weight. Today's range position -- a price that has moved far within the day tends to snap back a little, a well-documented short-term statistical tendency.",
+        "Today's range position -- a price that has moved far within the day tends to snap back a little, a well-documented short-term statistical tendency.",
       macro:
-        "10% weight. RBA/Fed policy, inflation, labour and growth releases -- the macro backdrop that eventually dominates over short-term technical noise.",
+        "RBA/Fed policy, inflation, labour and growth releases -- the macro backdrop that eventually dominates over short-term technical noise.",
       risk:
-        "7% weight. VIXY (volatility) -- AUD is a 'risk currency', typically sold for safety when markets get volatile.",
+        "VIXY (volatility) -- AUD is a 'risk currency', typically sold for safety when markets get volatile.",
     },
   },
   th: {
@@ -103,16 +127,27 @@ const STR = {
     drivers: "ปัจจัยขับเคลื่อน",
     technical: "แนวรับ-แนวต้าน & สัญญาณเทคนิค",
     correlation: "ความสัมพันธ์",
-    dominantFactor: "อะไรขับเคลื่อนคะแนนวันนี้",
+    scoreBreakdown: "ปัจจัยขับเคลื่อน (Score Breakdown)",
+    dominantNote: (label: string, pct: number) => `ปัจจัยที่ขับเคลื่อนคะแนนมากที่สุดวันนี้: ${label} (${pct.toFixed(0)}% ของน้ำหนักคะแนนวันนี้)`,
     mixed: "ไม่มีปัจจัยใดปัจจัยหนึ่งเด่นชัด -- กระจายอยู่หลายปัจจัย",
     shareOfScore: (pct: number) => `${pct.toFixed(0)}% ของน้ำหนักคะแนนวันนี้`,
     whatChanged: "ทำไมราคาถึงเคลื่อนไหว (อะไรเปลี่ยนไปจากเมื่อ ~24 ชม. ก่อน)",
     notEnoughAttribution: "โมเดลเวอร์ชันปัจจุบันยังมีประวัติไม่พอที่จะเปรียบเทียบ",
     pivotBasis: (date: string) => `คำนวณจากราคาปิดวันที่ ${date}`,
     swingRange: (days: number) => `กรอบ ${days} วัน`,
-    trend: "แนวโน้ม (SMA)",
-    momentum: "Momentum (RSI)",
     signalsLabel: "สัญญาณ",
+    resistance3: "แนวต้าน 3",
+    resistance2: "แนวต้าน 2",
+    resistance1: "แนวต้าน 1",
+    pivotPoint: "จุดหมุน (Pivot)",
+    support1: "แนวรับ 1",
+    support2: "แนวรับ 2",
+    support3: "แนวรับ 3",
+    trendShort: "แนวโน้มระยะสั้น",
+    aboveSma: (n: number) => `เหนือ SMA(${n})`,
+    belowSma: (n: number) => `ใต้ SMA(${n})`,
+    smaCrossUp: (s: number, l: number) => `SMA(${s}) > SMA(${l})`,
+    smaCrossDown: (s: number, l: number) => `SMA(${s}) < SMA(${l})`,
     corrNote: "ค่าสหสัมพันธ์ Pearson ของ % การเปลี่ยนแปลงรายวัน เทียบกับ % การเปลี่ยนแปลงรายวันของ AUD/THB เอง จากข้อมูลจริงที่ซ้อนทับกันเท่าที่มี",
     notEnoughCorr: (min: number) => `ต้องมีข้อมูลจริงซ้อนทับกันอย่างน้อย ${min} วัน`,
     strong: "แรง",
@@ -143,28 +178,28 @@ const STR = {
         "RSI(14), MA50 และ MA200 คำนวณจากอนุกรมราคาปิดรายวันจริงของ RBA F11.1 (ตั้งแต่ปี 2023) ซึ่งเป็นแหล่งข้อมูลจริงที่ยาวกว่าและเป็นอิสระจากฟีดเรียลไทม์ด้านบน การตัดกันของ MA50/MA200 คือสัญญาณ 'Golden Cross' / 'Death Cross' แบบคลาสสิกสำหรับแนวโน้มระยะยาว เลือกใช้แหล่งนี้เพราะอัตราอ้างอิงรายวันของ RBA เป็นแหล่งข้อมูลจริงแหล่งเดียวที่มีประวัติยาวพอ (900+ วัน) จะคำนวณค่าเฉลี่ย 50/200 วันได้อย่างมีความหมาย",
       macdTitle:
         "MACD = EMA 12 วัน ลบ EMA 26 วัน ของอนุกรมราคารายวัน RBA ส่วนเส้น Signal คือ EMA 9 วันของ MACD เอง ถ้า MACD อยู่เหนือ Signal (histogram เป็นบวก) อ่านว่าเป็นขาขึ้น ถ้าอยู่ใต้อ่านว่าเป็นขาลง เลือกใช้เพราะเป็นอินดิเคเตอร์แนวโน้ม-โมเมนตัมมาตรฐานที่สุดตัวหนึ่ง รวมทั้งสองอย่างไว้ในตัวเลขเดียว และคำนวณย้อนกลับได้จากราคาปิดรายวันจริงชุดเดียวกับที่ใช้ในหน้านี้",
-      dominantFactor:
-        "FX Score คือผลรวมถ่วงน้ำหนักของสัญญาณจริง 7 ตัว ส่วนนี้แสดงว่าปัจจัยไหนมีสัดส่วนมากที่สุดตอนนี้ พร้อมคะแนนที่แต่ละปัจจัยส่งผลต่อคะแนนรวมวันนี้ คำนวณด้วยวิธีเดียวกับที่ใช้สร้างคะแนนรวมจริง ผลรวมของแต่ละปัจจัยจึงเท่ากับคะแนนรวมเป๊ะ ไม่มี 'โมเดลอธิบาย' แยกต่างหากที่อาจขัดแย้งกับคะแนนจริง",
+      scoreBreakdown:
+        "FX Score คือผลรวมถ่วงน้ำหนักของสัญญาณจริง 7 ตัว ส่วนนี้แสดงน้ำหนักจริงของแต่ละปัจจัย คะแนนที่ส่งผลต่อคะแนนรวมวันนี้ และปัจจัยไหนมีสัดส่วนมากที่สุดตอนนี้ คำนวณด้วยวิธีเดียวกับที่ใช้สร้างคะแนนรวมจริง ผลรวมของแต่ละปัจจัยจึงเท่ากับคะแนนรวมเป๊ะ ไม่มี 'โมเดลอธิบาย' แยกต่างหากที่อาจขัดแย้งกับคะแนนจริง",
       whatChanged:
         "การเปรียบเทียบ FX Score ปัจจุบันกับสแนปช็อตเมื่อประมาณ 24 ชั่วโมงก่อน แบบทีละปัจจัยด้วยกฎตายตัว บอกเป็นภาษาที่อ่านง่ายว่าอินพุตจริงตัวไหนขยับไปเท่าไหร่ ไม่ใช่การเดาจาก AI สร้างข้อความ เลือกใช้วิธีนี้แทนสรุปแบบข้อความอิสระ เพื่อให้ทุกประโยคที่เห็นสืบย้อนกลับไปหาตัวเลขจริงที่เก็บไว้ในฐานข้อมูลได้",
       correlation:
         "ค่าสหสัมพันธ์ Pearson จริงระหว่าง % การเปลี่ยนแปลงรายวันของ AUD/THB เอง กับ % การเปลี่ยนแปลงรายวันของตลาดจริงอื่นๆ คำนวณจากแท่งราคารายวันที่แอปเก็บไว้เอง (ไม่ใช่น้ำหนักปัจจัยของโมเดล) มีประโยชน์เพราะเป็นการตรวจสอบอิสระจากข้อมูลจริงว่าตลาดไหนเคลื่อนไหวไปพร้อมกับ AUD/THB จริงๆ แยกต่างหากจากสมมติฐานของ FX Score ต้องมีข้อมูลจริงซ้อนทับกันอย่างน้อย 15 วันทำการต่อคู่ก่อนถึงจะแสดงตัวเลข เพื่อไม่ให้รายงานค่าสหสัมพันธ์ที่คำนวณจากข้อมูลน้อยเกินไปจนไม่มีความหมาย",
     },
-    factorTip: {
+    factorNote: {
       priceMomentum:
-        "น้ำหนัก 35% -- ปัจจัยที่หนักที่สุด โมเมนตัม 1H/4H จากฟีด AUD/THB จริงของระบบนี้ ให้น้ำหนักสูงสุดเพราะเป็นสัญญาณตรงและเรียลไทม์ที่สุดของการเคลื่อนไหว AUD/THB เอง",
+        "โมเมนตัม 1H/4H จากฟีด AUD/THB จริงของระบบนี้ ให้น้ำหนักสูงสุด (35%) เพราะเป็นสัญญาณตรงและเรียลไทม์ที่สุดของการเคลื่อนไหว AUD/THB เอง",
       crossCurrency:
-        "น้ำหนัก 20% -- AUD/USD x USD/THB (จับคู่เวลา) ใช้ตรวจสอบไขว้กับฟีด Direct ด้านบน ถ้าสองค่านี้ต่างกันมาก ส่วนต่างนั้นก็เป็นข้อมูลที่มีนัยสำคัญเช่นกัน",
+        "AUD/USD x USD/THB (จับคู่เวลา) ใช้ตรวจสอบไขว้กับฟีด Direct ด้านบน ถ้าสองค่านี้ต่างกันมาก ส่วนต่างนั้นก็เป็นข้อมูลที่มีนัยสำคัญเช่นกัน",
       relativeMarket:
-        "น้ำหนัก 15% -- ส่วนต่างผลตอบแทนพันธบัตร AU-US 2 ปี, USD/CNH และ USD/SGD เป็นตัวแทนความเสี่ยงในภูมิภาคและส่วนต่างอัตราดอกเบี้ยที่มักขับเคลื่อน AUD",
+        "ส่วนต่างผลตอบแทนพันธบัตร AU-US 2 ปี, USD/CNH และ USD/SGD เป็นตัวแทนความเสี่ยงในภูมิภาคและส่วนต่างอัตราดอกเบี้ยที่มักขับเคลื่อน AUD",
       commodity:
-        "น้ำหนัก 8% -- แร่เหล็กและเบรนท์ ความเชื่อมโยงเชิง terms-of-trade ของออสเตรเลีย เพราะ AUD มักเคลื่อนไหวตามราคาสินค้าโภคภัณฑ์ส่งออก",
+        "แร่เหล็กและเบรนท์ ความเชื่อมโยงเชิง terms-of-trade ของออสเตรเลีย เพราะ AUD มักเคลื่อนไหวตามราคาสินค้าโภคภัณฑ์ส่งออก",
       meanReversion:
-        "น้ำหนัก 5% -- ตำแหน่งราคาในกรอบวันนี้ ราคาที่วิ่งไกลในวันมักดีดกลับมาบ้าง เป็นแนวโน้มทางสถิติระยะสั้นที่มีการศึกษาไว้ชัดเจน",
+        "ตำแหน่งราคาในกรอบวันนี้ ราคาที่วิ่งไกลในวันมักดีดกลับมาบ้าง เป็นแนวโน้มทางสถิติระยะสั้นที่มีการศึกษาไว้ชัดเจน",
       macro:
-        "น้ำหนัก 10% -- นโยบาย RBA/Fed, เงินเฟ้อ, การจ้างงาน และการเติบโต ปัจจัยมหภาคที่ในที่สุดจะครอบงำสัญญาณทางเทคนิคระยะสั้น",
+        "นโยบาย RBA/Fed, เงินเฟ้อ, การจ้างงาน และการเติบโต ปัจจัยมหภาคที่ในที่สุดจะครอบงำสัญญาณทางเทคนิคระยะสั้น",
       risk:
-        "น้ำหนัก 7% -- VIXY (ความผันผวน) AUD เป็น 'risk currency' มักถูกขายเพื่อความปลอดภัยเมื่อตลาดผันผวน",
+        "VIXY (ความผันผวน) AUD เป็น 'risk currency' มักถูกขายเพื่อความปลอดภัยเมื่อตลาดผันผวน",
     },
   },
 } as const;
@@ -188,17 +223,36 @@ export default function AnalysisTabs({
   locale,
   technicalOutlook,
   scoreExplained,
+  scoreFactors,
   correlations,
   longTermTechnicals,
 }: {
   locale: Locale;
   technicalOutlook: TechnicalOutlook;
   scoreExplained: ScoreExplained;
+  scoreFactors: FactorContribution[];
   correlations: { rows: CorrelationRow[]; minSamples: number };
   longTermTechnicals: LongTermTechnicals;
 }) {
   const t = STR[locale];
   const [tab, setTab] = useState<SubTab>("price");
+
+  const smaTrend: "up" | "down" | "flat" =
+    technicalOutlook.smaShortValue === null || technicalOutlook.currentRate === null
+      ? "flat"
+      : technicalOutlook.currentRate >= technicalOutlook.smaShortValue
+        ? "up"
+        : "down";
+
+  const rsiTrend: "up" | "down" | "flat" =
+    technicalOutlook.rsiValue === null ? "flat" : technicalOutlook.rsiValue >= 60 ? "up" : technicalOutlook.rsiValue <= 40 ? "down" : "flat";
+
+  const crossTrend: "up" | "down" | "flat" =
+    technicalOutlook.smaShortValue === null || technicalOutlook.smaLongValue === null
+      ? "flat"
+      : technicalOutlook.smaShortValue >= technicalOutlook.smaLongValue
+        ? "up"
+        : "down";
 
   return (
     <div>
@@ -252,19 +306,20 @@ export default function AnalysisTabs({
           >
             {technicalOutlook.pivots ? (
               <div className="grid sm:grid-cols-2 gap-6">
-                <div className="space-y-2 text-sm">
+                <div className="space-y-1.5">
                   {[
-                    { label: "R3", value: technicalOutlook.pivots.r3 },
-                    { label: "R2", value: technicalOutlook.pivots.r2 },
-                    { label: "R1", value: technicalOutlook.pivots.r1 },
-                    { label: "Pivot", value: technicalOutlook.pivots.pivot },
-                    { label: "S1", value: technicalOutlook.pivots.s1 },
-                    { label: "S2", value: technicalOutlook.pivots.s2 },
-                    { label: "S3", value: technicalOutlook.pivots.s3 },
+                    { label: t.resistance3, value: technicalOutlook.pivots.r3, cls: "text-red-600 dark:text-red-400", bar: "bg-red-600" },
+                    { label: t.resistance2, value: technicalOutlook.pivots.r2, cls: "text-red-600 dark:text-red-400", bar: "bg-red-500" },
+                    { label: t.resistance1, value: technicalOutlook.pivots.r1, cls: "text-red-600 dark:text-red-400", bar: "bg-red-400" },
+                    { label: t.pivotPoint, value: technicalOutlook.pivots.pivot, cls: "text-v2-foreground", bar: "bg-slate-400 dark:bg-slate-500" },
+                    { label: t.support1, value: technicalOutlook.pivots.s1, cls: "text-emerald-600 dark:text-emerald-400", bar: "bg-emerald-400" },
+                    { label: t.support2, value: technicalOutlook.pivots.s2, cls: "text-emerald-600 dark:text-emerald-400", bar: "bg-emerald-500" },
+                    { label: t.support3, value: technicalOutlook.pivots.s3, cls: "text-emerald-600 dark:text-emerald-400", bar: "bg-emerald-600" },
                   ].map((row) => (
-                    <div key={row.label} className="flex items-center justify-between">
-                      <span className="text-v2-muted">{row.label}</span>
-                      <span className="font-mono text-v2-foreground">{row.value.toFixed(4)}</span>
+                    <div key={row.label} className="flex items-center gap-3 rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
+                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${row.bar}`} />
+                      <span className="text-sm text-v2-muted flex-1">{row.label}</span>
+                      <span className={`font-mono text-sm font-semibold ${row.cls}`}>{row.value.toFixed(4)}</span>
                     </div>
                   ))}
                   <p className="text-xs text-v2-muted pt-2">{t.pivotBasis(technicalOutlook.pivots.basedOnDate)}</p>
@@ -274,21 +329,54 @@ export default function AnalysisTabs({
                     </p>
                   )}
                 </div>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-1.5 text-xs font-medium text-v2-muted">
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-v2-muted mb-1">
                     {t.signalsLabel}
                     <InfoTooltip text={t.tip.technicalSignals} />
                   </div>
                   {technicalOutlook.smaShortValue !== null && (
-                    <div>
-                      <p className="text-xs text-v2-muted">{t.trend} ({technicalOutlook.smaShortPeriod})</p>
-                      <p className="font-mono text-lg text-v2-foreground">{technicalOutlook.smaShortValue.toFixed(4)}</p>
+                    <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
+                      <span className="text-sm text-v2-muted">
+                        {technicalOutlook.smaShortPeriod !== null ? `SMA(${technicalOutlook.smaShortPeriod})` : "SMA"}
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <span className="font-mono text-sm font-semibold text-v2-foreground">{technicalOutlook.smaShortValue.toFixed(4)}</span>
+                        <TrendArrow trend={smaTrend} />
+                      </span>
                     </div>
                   )}
                   {technicalOutlook.rsiValue !== null && (
-                    <div>
-                      <p className="text-xs text-v2-muted">{t.momentum} ({technicalOutlook.rsiPeriod})</p>
-                      <p className="font-mono text-lg text-v2-foreground">{technicalOutlook.rsiValue.toFixed(1)}</p>
+                    <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
+                      <span className="text-sm text-v2-muted">
+                        {technicalOutlook.rsiPeriod !== null ? `RSI(${technicalOutlook.rsiPeriod})` : "RSI"}
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <span className="font-mono text-sm font-semibold text-v2-foreground">{technicalOutlook.rsiValue.toFixed(1)}</span>
+                        <TrendArrow trend={rsiTrend} />
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
+                    <span className="text-sm text-v2-muted">{t.trendShort}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="text-sm text-v2-foreground">
+                        {technicalOutlook.smaShortPeriod !== null
+                          ? smaTrend === "up"
+                            ? t.aboveSma(technicalOutlook.smaShortPeriod)
+                            : t.belowSma(technicalOutlook.smaShortPeriod)
+                          : "--"}
+                      </span>
+                      <TrendArrow trend={smaTrend} />
+                    </span>
+                  </div>
+                  {technicalOutlook.smaLongPeriod !== null && technicalOutlook.smaShortPeriod !== null && (
+                    <div className="flex items-center justify-between rounded-lg px-2.5 py-2 hover:bg-v2-bg/70 dark:hover:bg-slate-800/40">
+                      <span className="text-sm text-v2-muted">
+                        {crossTrend === "up"
+                          ? t.smaCrossUp(technicalOutlook.smaShortPeriod, technicalOutlook.smaLongPeriod)
+                          : t.smaCrossDown(technicalOutlook.smaShortPeriod, technicalOutlook.smaLongPeriod)}
+                      </span>
+                      <TrendArrow trend={crossTrend} />
                     </div>
                   )}
                 </div>
@@ -373,32 +461,39 @@ export default function AnalysisTabs({
           <Card
             title={
               <span className="flex items-center gap-1.5">
-                {t.dominantFactor}
-                <InfoTooltip text={t.tip.dominantFactor} />
+                {t.scoreBreakdown}
+                <InfoTooltip text={t.tip.scoreBreakdown} />
               </span>
             }
           >
-            {scoreExplained.regime && scoreExplained.regime.key !== "MIXED" && scoreExplained.regime.dominantSharePct !== null ? (
-              <div>
-                <p className="text-xl font-semibold text-v2-foreground">{FACTOR_LABELS[scoreExplained.regime.key][locale]}</p>
-                <p className="text-sm text-v2-muted mt-1">{t.shareOfScore(scoreExplained.regime.dominantSharePct)}</p>
-              </div>
-            ) : (
-              <p className="text-sm text-v2-muted">{t.mixed}</p>
-            )}
+            <p className="text-sm text-v2-muted mb-5">
+              {scoreExplained.regime && scoreExplained.regime.key !== "MIXED" && scoreExplained.regime.dominantSharePct !== null
+                ? t.dominantNote(FACTOR_LABELS[scoreExplained.regime.key][locale], scoreExplained.regime.dominantSharePct)
+                : t.mixed}
+            </p>
 
-            <div className="mt-5 space-y-2">
-              {scoreExplained.attribution.factors.map((f) => (
-                <div key={f.key} className="flex items-center justify-between text-sm">
-                  <span className="text-v2-muted flex items-center gap-1.5">
-                    {FACTOR_LABELS[f.key][locale]}
-                    <InfoTooltip text={t.factorTip[f.key]} />
-                  </span>
-                  <span className="font-mono text-v2-foreground">
-                    {f.currentContribution !== null ? f.currentContribution.toFixed(1) : "--"}
-                  </span>
-                </div>
-              ))}
+            <div className="space-y-4">
+              {scoreFactors.map((f) => {
+                const widthPct = f.contribution !== null ? Math.min(100, (Math.abs(f.contribution) / MAX_FACTOR_WEIGHT) * 100) : 0;
+                const barColor =
+                  f.contribution === null || f.contribution === 0 ? "bg-slate-300 dark:bg-slate-600" : f.contribution > 0 ? "bg-emerald-500" : "bg-red-500";
+                return (
+                  <div key={f.key}>
+                    <div className="flex items-center justify-between text-sm mb-1">
+                      <span className="text-v2-foreground font-medium">
+                        {FACTOR_LABELS[f.key][locale]} ({f.weight.toFixed(0)}%)
+                      </span>
+                      <span className={`font-mono font-medium ${changeColorClass(f.contribution)}`}>
+                        {f.contribution !== null ? `${f.contribution > 0 ? "+" : ""}${f.contribution}` : "N/A"}
+                      </span>
+                    </div>
+                    <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800">
+                      <div className={`h-2 rounded-full ${barColor} transition-[width] duration-500`} style={{ width: `${widthPct}%` }} />
+                    </div>
+                    <p className="text-xs text-v2-muted mt-1.5 leading-relaxed">{t.factorNote[f.key]}</p>
+                  </div>
+                );
+              })}
             </div>
           </Card>
 

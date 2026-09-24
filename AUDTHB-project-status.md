@@ -1202,3 +1202,46 @@ Correlation correctly shows "needs 15+ overlapping days" for all 6
 pairs since real price history is still only ~14 days old). Checked
 375px mobile: no horizontal overflow. `npx tsc --noEmit` and
 `npx next build` both pass clean.
+
+## Analysis tab follow-up: full-word Resistance/Support labels, fuller Signals list, Drivers replaced with the real Score Breakdown bars (2026-09-24)
+
+Follow-up feedback on the just-merged Analysis tab (previous section above):
+"เปลี่ยนแนวรับแนวต้านเป็นคำเต็ม resistance/support", "เพิ่ม signals อื่นๆ อีกให้มันเต็มๆ", and
+"Driver อธิบายเต็มๆ เลยไม่ต้องใส่ใน tooltip เอา FX score breakdown มาใส่เลยตามฟอร์ม ไม่ใช่หัวข้อ mean reversion".
+
+`components/v2/AnalysisTabs.tsx` changes:
+- **Technical Levels & Signals card**: R3/R2/R1/Pivot/S1/S2/S3 abbreviations
+  replaced with the same full words + colored dot markers Dashboard's
+  Technical Levels card already uses (Resistance 3/2/1, Pivot Point,
+  Support 1/2/3 -- red/slate/emerald).
+- **Signals column**: was just 2 bare numbers (SMA value, RSI value).
+  Now mirrors Dashboard's full Technical Signals card exactly: SMA value
+  + trend arrow, RSI value + trend arrow, a short-term trend verdict
+  ("Above/Below SMA(n)"), and the SMA(short)/SMA(long) cross verdict --
+  all real, computed the same way (`smaTrend`/`rsiTrend`/`crossTrend`,
+  copied from `app/(dashboard)/page.tsx`'s own logic so the two pages
+  can't disagree).
+- **Drivers tab**: replaced the old "What's driving today" card (a big
+  headline naming whichever single factor currently dominates, e.g.
+  "Mean Reversion" -- confusing on a low-data day where a 5%-weight
+  factor can technically lead) with the real **FX Score Breakdown**
+  widget, reusing the exact same weight/contribution numbers and
+  progress-bar UI as Dashboard's Score Breakdown card
+  (`computeContributions(rawFactorsFromDashboard(data))`, now computed
+  server-side in `app/(dashboard)/analysis/page.tsx` and passed down as
+  a `scoreFactors` prop, since `lib/score-factors.ts` is `server-only`
+  and `AnalysisTabs` is a client component). The old dominant-factor
+  line is kept, but shrunk to one context sentence above the bars
+  instead of being the card's headline. Per-factor descriptions moved
+  from a hover tooltip to an always-visible paragraph under each bar
+  (same real weight/definition facts as the About tab), since this is
+  the deep-dive page and the user didn't want that content hidden
+  behind a hover.
+
+Verified live: pivot list now reads "แนวต้าน 3 / แนวต้าน 2 / แนวต้าน 1 /
+จุดหมุน (Pivot) / แนวรับ 1 / แนวรับ 2 / แนวรับ 3"; Signals section shows
+SMA(5)/RSI(12) with arrows + "ใต้ SMA(5)" + "SMA(5) < SMA(13)"; Drivers
+tab shows all 7 factors with real weights (35/20/14/4/5/10/0%),
+contributions, colored bars, and full inline text -- matching Dashboard's
+numbers exactly. Checked 375px mobile: no overflow. `npx tsc --noEmit`
+and `npx next build` both pass clean.
