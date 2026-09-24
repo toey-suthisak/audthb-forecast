@@ -1453,3 +1453,217 @@ baseline, beats it), 4H n=160 (40.6% vs 19.4% baseline, beats it),
 DAILY n=141 (28.4% vs 30.5% baseline, does *not* beat it) -- an honest
 number, shown as "ชนะ Baseline: ไม่ใช่" rather than hidden. Verified
 live on both Dashboard's Forecast card and the Performance tab.
+
+## Forecast accuracy: real-data search for a signal, then a methodology fix instead of a formula change (2026-09-24)
+
+User asked for real accuracy improvement (see the "Forecast card" entry
+above -- "อยากได้ความแม่นยำที่ดีขึ้นจริงๆ ไม่ใช่แค่ UI"). Investigated with
+real data before writing any code, on two independent sources:
+
+1. **927-day RBA `backtest_daily_rates`** (the largest, most independent
+   real sample this project has): tested momentum/mean-reversion at 1,
+   3, 5, 10, 20-day lags via Postgres `corr()`/`regr_r2()`. All windows
+   show a weak but statistically real mean-reversion tendency (corr
+   -0.05 to -0.09, p<0.05 at 1d/3d) -- r² tops out at 0.7%. Acting on it
+   gets 37% directional accuracy: beats the near-useless "predict no
+   move" baseline (20%) but does not beat a coin flip (50%), consistent
+   with `backtest-data.ts`'s own already-shipped 5-day momentum/reversion
+   strategies.
+2. **Live forecast's own resolved outcomes** (n=117 real DAILY/1.1.0
+   matches): trailing-24h price change correlates with the next day's
+   move at r²=0.06, higher than `core_fx_score`'s own r²=0.024 -- but
+   this sample is ~2 weeks deep with heavily overlapping hourly windows
+   (each 24h-ahead forecast shares ~23 of 24 hours with its neighbor),
+   and its sign *contradicts* the larger 927-day sample (momentum vs.
+   mean-reversion). Treated as noise, not a real edge -- trusting a
+   small overlapping-window sample over the large independent one would
+   repeat the exact small-sample-overfitting mistake the shrinkage
+   calibration above was built to avoid.
+
+**Conclusion: no exploitable signal found.** Every real predictor tested
+(score, momentum, reversion, multiple windows) caps out at r²=1-6%, none
+clear a coin-flip bar out of sample. AUD/THB looks genuinely close to a
+random walk at these horizons given what's actually measurable today --
+a real finding, not a failure to look hard enough. Presented this to the
+user with the real numbers rather than picking one to act on; user chose
+to fix the *measurement methodology* instead of chasing a formula
+change.
+
+**Real problem found in the methodology itself**: `HORIZON_CONFIG`'s
+calibrated slope/intercept (see the entry above) were fit by regressing
+`actual_move_pct` on `core_fx_score` over historical `fx_score_snapshots`
+rows. The `1.1.0` backfill immediately after (also above) replayed the
+*exact same* historical rows through the new formula to seed Track
+Record. Checked live: of `1.1.0`'s 165/162/142 forecast_runs per horizon,
+164/161/141 are backfilled and only 1 is genuinely live per horizon (0
+of which had resolved yet for DAILY at check time) -- so today's
+Track Record numbers (44.4%/40.6%/28.4%) are essentially in-sample,
+like reporting a regression's training accuracy, not a real
+out-of-sample measurement, even though they're graded against real
+resolved outcomes.
+
+Fixed by adding a real distinction, not a new assumption: `forecast_runs`
+gained `is_backfilled boolean` (`supabase/migrations/
+20260924_forecast_runs_is_backfilled.sql`), derived from a structural
+fact already in the data -- both `issued_at`/`created_at` default to
+`now()`, so a live cron row always has them nearly identical, while a
+backfill script explicitly back-dates `issued_at` to a past `run_slot`
+while `created_at` still defaults to the backfill's real run time. Backed
+out via `created_at - issued_at > 1 hour`, verified against Supabase to
+correctly flag exactly the 164/161/141 known-backfilled `1.1.0` rows
+(older `1.0.0`/`1.0.1` backfills aren't caught by this heuristic -- that
+earlier backfill script explicitly back-dated `created_at` too -- but
+those versions are already excluded from every live view by the existing
+`FORECAST_VERSION`-only filter, so this doesn't affect anything visible).
+`app/api/score-snapshot/route.ts` (the live cron) now sets
+`is_backfilled: false` explicitly.
+
+`lib/evaluation-data.ts`'s `HorizonEvaluation` gained a parallel
+`outOfSample` stat bundle (same directional accuracy / MAE / interval
+coverage / beats-baseline shape as the existing top-level fields, just
+computed only over `is_backfilled = false` rows) plus a `backfilledCount`.
+The existing top-level numbers are unchanged (still the honest "graded
+against every real resolved outcome" figure, now understood to include
+backfill) -- `outOfSample` is additive, surfaced on the Performance tab's
+three horizon cards and `/classic`'s Evaluation card as a second line
+that will honestly read "not enough yet" for a while (currently 1/20,
+1/20, 0/20) until the live hourly cron accumulates enough post-
+calibration resolved forecasts on its own. No formula, weight, or
+`FORECAST_VERSION` changed -- this doesn't reset Track Record, it just
+stops the current numbers from being silently in-sample going forward.
+
+Verified live: Performance tab and `/classic` both render the new
+out-of-sample line with real Supabase-matching counts (1H 1/20, 4H 1/20,
+DAILY 0/20). Checked 375px mobile: no overflow. `npx tsc --noEmit` and
+`npx next build` both pass clean.
+
+## Fixed: live Brent feed silently dead for 3 days -- OilPriceAPI trial ended (2026-09-24, same day)
+
+User asked for a general "upgrade -- better, more accurate, prettier,
+easier to understand" pass with no specific target. Reviewed the live
+site screenshot-by-screenshot (Dashboard, Analysis, Data tabs) looking
+for real, concrete issues rather than guessing at a redesign. Found one:
+the Data tab's `เบรนท์ (เรียลไทม์)` row read `STALE`.
+
+Root-caused against Supabase directly: `commodity_prices` showed
+`BRENT_LIVE_USD` had zero new rows since 2026-09-21 09:15 UTC (its EIA
+backup, `BRENT_EIA_USD`, kept ingesting fine the whole time -- this was
+specific to the live feed). Called the real OilPriceAPI endpoint this
+project's cron uses directly: HTTP 402, `"Your 7-day trial has ended...
+Historical price data (past_day, past_week, past_month, past_year) now
+requires a paid plan. Latest prices (/v1/prices/latest) remain available
+on the Free tier."` -- the trial end timestamp in that error
+(`2026-09-21T09:29:47Z`) lines up exactly with the last successful
+ingest. `app/api/commodity/route.ts`'s `fetchBrentLatestClean` had been
+calling the now-paid `/v1/prices/past_day` and filtering for one
+"clean" observation (`synthetic=false`, `stale=false`,
+`roll_method=publisher_managed_front_month`,
+`source_tier=publisher_primary`); every call since the trial ended
+returned nothing, and the route silently no-op'd instead of erroring
+loudly (same "fails safe, never writes bad data, but can go stale with
+no alarm" pattern already noted for the RBA backtest cron).
+
+Fixed by switching to `/v1/prices/latest?by_code=BRENT_CRUDE_USD` --
+confirmed free-tier (HTTP 200, real current price) and already the
+exact pattern `app/api/iron-ore/route.ts` has used successfully since
+2026-09-21 (which is why Iron Ore never went stale from this). `/latest`
+returns one object instead of an array of candidates, so
+`fetchBrentLatestClean` no longer picks "newest of many clean rows" --
+it validates the single observation directly (`code`, `synthetic`,
+`stale`, `as_of`), mirroring `iron-ore/route.ts`'s own validation shape.
+Source label changed from `"OilPriceAPI publisher_primary"` to
+`"OilPriceAPI latest"` to reflect the real endpoint -- which meant
+`lib/commodity-data.ts`'s two `.eq("source", "OilPriceAPI
+publisher_primary")` queries (the live Brent lookup and its 1H-change
+lookback) needed the same rename, or the dashboard would keep reading
+the last pre-2026-09-21 row forever even after ingestion resumed. Found
+this the hard way -- fixed the ingest route first, verified a fresh row
+landed in Supabase, then found the Data tab was *still* showing the old
+102.15/STALE because of this second, separate stale-source-string bug
+downstream.
+
+Verified live end-to-end: triggered `/api/commodity` against the real
+API, got back `BRENT_LIVE_USD` 103.75 (11.6 min old, FRESH), confirmed
+the row in Supabase, then confirmed the Data tab flips to
+`103.75 / FRESH`. Brent's 1H change (and therefore its contribution to
+the Commodity factor) will read null for about an hour until a second
+`"OilPriceAPI latest"` row exists to diff against -- an honest,
+temporary gap while real history accumulates under the new source
+label, not a fabricated fallback. `npx tsc --noEmit` and `npx next
+build` both pass clean.
+
+Reviewed Analysis and About tabs in the same pass looking for other
+concrete bugs or stale copy -- none found; the Score Breakdown numbers
+matched exactly between Dashboard and Analysis > Drivers (confirming
+the shared `computeContributions()` refactor still holds), and About's
+stated R² range (0.4%-2.7%) still matches the real regression from the
+2026-09-24 calibration entry above. Did not attempt a further forecast-
+accuracy pass -- the same-day investigation above already concluded
+there's no exploitable signal in the data available today.
+
+## FORECAST_VERSION 1.2.0: DAILY range recalibrated from real self-data, plus a real 1000-row eval bug found along the way (2026-09-24, same day)
+
+User: Performance tab's "Recent Forecast History" (DAILY, updates
+hourly) showed a very wide predicted range -- asked to try narrowing it
+and push.
+
+Checked real numbers before changing the constant: DAILY's
+`referenceRangePct` (0.39%) was calibrated back on 2026-09-20 from the
+927-day RBA `backtest_daily_rates` series (mean absolute daily move
+0.394%) because DAILY had no real resolved outcomes of its own yet. By
+now it does -- 141 real MATCHED `forecast_outcomes` at `1.1.0`. Queried
+that directly: mean |actual_move_pct| is only 0.2219%, not 0.394% --
+confirmed by DAILY's own interval-coverage stat sitting at 83% versus
+1H/4H's 53-61% (1H/4H were already calibrated the "right" way, against
+their own real resolved outcomes, back when they were added). The RBA
+proxy was measuring a different thing (a different, coarser daily-close
+series) and overstated this exact forecast's real move size.
+
+Fix: `lib/forecast-data.ts` `HORIZON_CONFIG.DAILY.referenceRangePct`
+0.39 -> 0.22 (rounded mean |actual_move_pct| from the real 141-sample
+DAILY/1.1.0 data), the same "mean of own real resolved outcomes" method
+1H/4H already used -- not a new methodology, just extending the
+existing one to DAILY now that it has enough data for it.
+`calibratedSlope`/`calibratedIntercept` (point estimate, direction) are
+untouched -- only the +/- band width changed.
+
+Changing what `buildForecast()` outputs (`predicted_range_low/high_pct`)
+meant `FORECAST_VERSION` needed to bump again (1.1.0 -> 1.2.0), same
+standard as every prior version bump in this file -- mixing forecasts
+graded against two different range definitions under one "interval
+coverage" number would be incoherent. Immediately backfilled 1.2.0 the
+same way as 1.1.0 (SQL against Supabase, not new app code): replayed
+the same 166 real historical `fx_score_snapshots` rows through the
+unchanged slope/intercept and the new range constant, inserted as
+`forecast_runs` with `is_backfilled = true` set directly (now that the
+column exists, rather than relying on the timing heuristic used to
+retrofit older backfills), matched against real `market_prices` within
+240 minutes -- 165/162/142 resolved for 1H/4H/DAILY (slightly *more*
+complete than 1.1.0's own backfill, since `market_prices` has grown
+since then).
+
+**Found a real, independent bug while verifying this**: right after the
+backfill, Track Record showed "0/20" for all three horizons even though
+Supabase had hundreds of real matched rows. Root cause:
+`forecast_outcomes` had grown to 1,478 total MATCHED rows, past
+Supabase/PostgREST's default 1000-row response cap -- `lib/
+evaluation-data.ts`'s query had no explicit filter/order/limit, so it
+silently returned only an arbitrary first-1000-rows slice that excluded
+every newly-backfilled 1.2.0 row (the highest ids). Same class of bug as
+the `market_prices` 1000-row truncation documented earlier in this
+project, just in a different table, and it would have started silently
+degrading Track Record eventually even without this session's change,
+once total matched rows crossed 1000 on their own. Fixed by adding
+`.eq("forecast_runs.forecast_version", FORECAST_VERSION)` to the query
+itself -- correct on its own merits (every consumer only ever wants the
+current version), not just a cap workaround, and keeps the row count
+far under 1000 again.
+
+Verified live end-to-end: Performance tab and Dashboard's Forecast card
+both show visibly narrower DAILY ranges (e.g. Prefund/Postfund
+23.4949-23.5984 vs. the old ~0.39%-wide band), real Track Record numbers
+restored for all three horizons (1H 44.2%/165, 4H 40.7%/162, DAILY
+28.2%/142 -- direction accuracy unchanged from 1.1.0 as expected, since
+only the range changed), DAILY's interval coverage now honestly 52%
+(down from 83%, in line with 1H/4H). Checked 375px mobile: no overflow.
+`npx tsc --noEmit` and `npx next build` both pass clean.

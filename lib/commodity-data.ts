@@ -397,7 +397,7 @@ export async function getCommodityData(): Promise<CommodityData> {
         )
         .eq(
           "source",
-          "OilPriceAPI publisher_primary"
+          "OilPriceAPI latest"
         )
         .order(
           "market_timestamp",
@@ -561,7 +561,7 @@ export async function getCommodityData(): Promise<CommodityData> {
     const past =
       await getClosestCommodityPrice(
         "BRENT_LIVE_USD",
-        "OilPriceAPI publisher_primary",
+        "OilPriceAPI latest",
         latestTime -
           60 *
             60 *

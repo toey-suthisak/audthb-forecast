@@ -28,6 +28,8 @@ const STR = {
     avgError: "Avg Error",
     inRange: "In Predicted Range",
     beatsBaseline: "Beats Baseline",
+    outOfSample: "Out-of-sample (live only)",
+    outOfSampleNotEnough: (n: number, min: number) => `${n}/${min} live resolved -- not enough yet.`,
   },
   th: {
     title: "สถิติผลงาน",
@@ -42,6 +44,8 @@ const STR = {
     avgError: "ค่าคลาดเคลื่อนเฉลี่ย",
     inRange: "อยู่ในช่วงที่พยากรณ์",
     beatsBaseline: "ชนะ Baseline",
+    outOfSample: "Out-of-sample (เฉพาะของจริง)",
+    outOfSampleNotEnough: (n: number, min: number) => `มีผลจริง ${n}/${min} -- ยังไม่พอ`,
   },
 } as const;
 
@@ -118,6 +122,15 @@ export default async function Evaluation({ locale }: { locale: Locale }) {
                       }`}
                     >
                       {g.beatsBaseline.directionally === null ? "--" : tLabel(g.beatsBaseline.directionally ? "Yes" : "No", locale)}
+                    </p>
+                  </div>
+
+                  <div className="col-span-2 sm:col-span-4 pt-1 border-t border-stone-300/50 dark:border-stone-700/50 mt-1">
+                    <p className="text-[11px] text-stone-600 dark:text-stone-400">
+                      {t.outOfSample}:{" "}
+                      {g.outOfSample.insufficientData
+                        ? t.outOfSampleNotEnough(g.outOfSample.sampleSize, 20)
+                        : formatPct(g.outOfSample.model.directionalAccuracy)}
                     </p>
                   </div>
                 </div>

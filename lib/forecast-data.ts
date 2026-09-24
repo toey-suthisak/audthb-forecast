@@ -18,7 +18,29 @@ import "server-only";
 // output differs under the new rule, so mixing pre/post-calibration
 // resolved forecasts under one accuracy number would be incoherent.
 // All three horizons reset to zero samples for this version.
-export const FORECAST_VERSION = "1.1.0";
+//
+// Bumped again to 1.2.0 on 2026-09-24 (same day) when DAILY's
+// referenceRangePct was recalibrated -- user flagged the Performance
+// tab's "Recent Forecast History" range as far too wide. Root cause:
+// DAILY's band (0.39%) was calibrated from the 927-day RBA
+// backtest_daily_rates series (a different, coarser daily-close proxy)
+// while 1H/4H were already calibrated against this project's own real
+// resolved forecast_outcomes. By 2026-09-24, DAILY finally had its own
+// 141 real resolved outcomes to check against directly: real mean
+// |actual_move_pct| was only 0.2219%, not 0.394% -- the RBA proxy was
+// overstating this exact forecast's real move size (83% interval
+// coverage vs. 1H/4H's own 53-61%, confirming DAILY's band was
+// disproportionately wide, not just "wide in absolute baht"). Switched
+// DAILY to 0.22%, the same "mean |actual_move_pct| from this project's
+// own real resolved outcomes at this horizon" method 1H/4H already use
+// -- consistent methodology across all three now that all three have
+// enough real data for it, exactly as the old comment below anticipated
+// ("revisit once more history accumulates"). Only the range width
+// changed -- calibratedSlope/Intercept (point estimate, direction) are
+// untouched. Backfilled immediately from the same 166 real historical
+// fx_score_snapshots rows used for 1.1.0 (same pattern as every prior
+// version bump): 165/162/142 resolved for 1H/4H/DAILY.
+export const FORECAST_VERSION = "1.2.0";
 
 export type ForecastHorizon = "1H" | "4H" | "DAILY";
 
@@ -31,14 +53,18 @@ type HorizonConfig = {
   // fitted prediction, and not a claim that Core FX Score predicts
   // direction or magnitude at that horizon.
   //
-  // DAILY: calibrated 2026-09-20 against the 927-day RBA backtest
-  // (mean absolute daily move 0.394%, see backtest_daily_rates).
-  // 1H / 4H: this project has no free historical intraday source, so
-  // these are calibrated against this project's own live AUD/THB
-  // Direct feed instead (market_prices, 2026-09-11..20, ~9 days at
-  // 10-min resolution: mean |1H move| 0.042%, mean |4H move| 0.071%).
-  // Much thinner evidence than DAILY's 927 days -- revisit once more
-  // history accumulates.
+  // All three horizons now use the same method: mean |actual_move_pct|
+  // over this project's own real resolved forecast_outcomes at this
+  // horizon (forecast_version 1.1.0, checked 2026-09-24 -- 1H n=165
+  // mean 0.0408%, 4H n=162 mean 0.0828%, DAILY n=141 mean 0.2219%,
+  // rounded to 0.04/0.07/0.22 respectively, roughly matching each
+  // horizon's own real 1H/4H/DAILY interval-coverage rate). DAILY was
+  // previously 0.39%, calibrated instead from the 927-day RBA
+  // backtest_daily_rates series (a coarser daily-close proxy, used
+  // because DAILY had no real resolved outcomes of its own yet at the
+  // time) -- switched once DAILY had enough real data to calibrate
+  // against directly, same as 1H/4H always have. See FORECAST_VERSION
+  // 1.2.0 comment above for the full real numbers and why.
   referenceRangePct: number;
   // Real, shrinkage-calibrated slope (%/score-point) and intercept (%)
   // for the point estimate -- see the long comment above buildForecast
@@ -50,7 +76,7 @@ type HorizonConfig = {
 export const HORIZON_CONFIG: Record<ForecastHorizon, HorizonConfig> = {
   "1H": { hours: 1, referenceRangePct: 0.04, calibratedSlope: 0.000415, calibratedIntercept: -0.000037 },
   "4H": { hours: 4, referenceRangePct: 0.07, calibratedSlope: 0.000694, calibratedIntercept: -0.000068 },
-  DAILY: { hours: 24, referenceRangePct: 0.39, calibratedSlope: 0.0037, calibratedIntercept: -0.002599 },
+  DAILY: { hours: 24, referenceRangePct: 0.22, calibratedSlope: 0.0037, calibratedIntercept: -0.002599 },
 };
 
 export type ForecastDirection = "BULLISH" | "BEARISH" | "NEUTRAL";

@@ -61,15 +61,12 @@ type MatchedOutcomeRow = {
   predicted_range_high_pct: number | string;
   actual_move_pct: number | string;
   absolute_error_pct: number | string;
+  is_backfilled: boolean;
 };
 
-export type HorizonEvaluation = {
-  horizon: string;
-  horizonHours: number;
-  forecastVersion: string;
+type StatBundle = {
   sampleSize: number;
   insufficientData: boolean;
-  minSampleSize: number;
 
   model: {
     directionalAccuracy: number | null;
@@ -90,6 +87,29 @@ export type HorizonEvaluation = {
   };
 };
 
+export type HorizonEvaluation = StatBundle & {
+  horizon: string;
+  horizonHours: number;
+  forecastVersion: string;
+  minSampleSize: number;
+
+  // Every stat above this point includes backfilled rows -- forecast_runs
+  // seeded retroactively from historical fx_score_snapshots using the
+  // exact slope/intercept HORIZON_CONFIG already stores. Those rows share
+  // the same historical price/score facts the coefficients were fit from,
+  // so grading the model against them is in-sample, not a genuine
+  // out-of-sample measurement (a real accuracy number computed the same
+  // way you'd compute training-set accuracy for a fitted regression).
+  // outOfSample below re-runs the identical stats using only rows the
+  // live hourly cron produced after that fit (is_backfilled = false) --
+  // the only rows that are genuinely unseen data as far as the
+  // calibration is concerned. Expect this to show insufficientData for a
+  // while after any recalibration/version bump, honestly, since backfills
+  // dominate the sample immediately after one.
+  backfilledCount: number;
+  outOfSample: StatBundle;
+};
+
 function toNumber(value: number | string): number {
   return typeof value === "number" ? value : Number(value);
 }
@@ -108,9 +128,7 @@ function actualDirection(actualMovePct: number, neutralBandPct: number): "BULLIS
   return "NEUTRAL";
 }
 
-function evaluateGroup(rows: MatchedOutcomeRow[]): HorizonEvaluation {
-  const first = rows[0];
-  const neutralBand = neutralBandFor(first.horizon);
+function computeStats(rows: MatchedOutcomeRow[], neutralBand: number): StatBundle {
   const sampleSize = rows.length;
   const insufficientData = sampleSize < MIN_SAMPLE_SIZE;
 
@@ -137,12 +155,8 @@ function evaluateGroup(rows: MatchedOutcomeRow[]): HorizonEvaluation {
   const baselineMae = insufficientData ? null : average(baselineAbsErrors);
 
   return {
-    horizon: first.horizon,
-    horizonHours: first.horizon_hours,
-    forecastVersion: first.forecast_version,
     sampleSize,
     insufficientData,
-    minSampleSize: MIN_SAMPLE_SIZE,
 
     model: {
       directionalAccuracy: modelDirectionalAccuracy,
@@ -168,20 +182,52 @@ function evaluateGroup(rows: MatchedOutcomeRow[]): HorizonEvaluation {
   };
 }
 
+function evaluateGroup(rows: MatchedOutcomeRow[]): HorizonEvaluation {
+  const first = rows[0];
+  const neutralBand = neutralBandFor(first.horizon);
+  const liveRows = rows.filter((r) => !r.is_backfilled);
+
+  return {
+    horizon: first.horizon,
+    horizonHours: first.horizon_hours,
+    forecastVersion: first.forecast_version,
+    minSampleSize: MIN_SAMPLE_SIZE,
+    backfilledCount: rows.length - liveRows.length,
+
+    ...computeStats(rows, neutralBand),
+    outOfSample: computeStats(liveRows, neutralBand),
+  };
+}
+
 export async function getEvaluationSummary(): Promise<{
   groups: HorizonEvaluation[];
   totalMatchedOutcomes: number;
   methodology: string;
   error: string | null;
 }> {
+  // Filtered to the current FORECAST_VERSION *in the query itself*, not
+  // just client-side after fetching -- found live 2026-09-24 that
+  // forecast_outcomes had grown past 1478 MATCHED rows total, over
+  // Supabase/PostgREST's default 1000-row response cap (same class of
+  // bug as the market_prices 1000-row truncation documented elsewhere
+  // in this file's history). With no explicit filter/order/limit, the
+  // unfiltered query silently returned only its default-ordered first
+  // 1000 rows, which happened to exclude every row from the
+  // just-created 1.2.0 backfill (the newest, highest-id rows) --
+  // Track Record read "0/20" for a version that actually had hundreds
+  // of real resolved outcomes. Every consumer only ever wants the
+  // current version anyway (see the old post-fetch filter this
+  // replaced), so filtering here is strictly correct, not just a
+  // workaround, and keeps the row count comfortably under the cap.
   const { data, error } = await supabaseAdmin
     .from("forecast_outcomes")
     .select(
       "status, actual_move_pct, absolute_error_pct, " +
         "forecast_runs!inner(horizon, horizon_hours, forecast_version, predicted_direction, " +
-        "predicted_range_low_pct, predicted_range_high_pct)",
+        "predicted_range_low_pct, predicted_range_high_pct, is_backfilled)",
     )
-    .eq("status", "MATCHED");
+    .eq("status", "MATCHED")
+    .eq("forecast_runs.forecast_version", FORECAST_VERSION);
 
   if (error) {
     return {
@@ -206,6 +252,7 @@ export async function getEvaluationSummary(): Promise<{
       predicted_direction: string;
       predicted_range_low_pct: number | string;
       predicted_range_high_pct: number | string;
+      is_backfilled: boolean;
     };
   };
 
@@ -218,6 +265,7 @@ export async function getEvaluationSummary(): Promise<{
     predicted_range_high_pct: row.forecast_runs.predicted_range_high_pct,
     actual_move_pct: row.actual_move_pct,
     absolute_error_pct: row.absolute_error_pct,
+    is_backfilled: row.forecast_runs.is_backfilled,
   }));
 
   const groupKey = (r: MatchedOutcomeRow) => `${r.horizon}::${r.forecast_version}`;

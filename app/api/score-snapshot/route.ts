@@ -206,6 +206,9 @@ export async function GET(request: Request) {
 
           status: "CALIBRATED",
           methodology: forecast.methodology,
+          // This route is the live hourly cron, never a backfill script --
+          // see forecast_runs_is_backfilled migration / evaluation-data.ts.
+          is_backfilled: false,
         };
 
         const forecastDatabase = await upsertImmutable(

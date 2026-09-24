@@ -20,6 +20,10 @@ const STR = {
     rangeHit: "Range Hit Rate",
     totalForecasts: "Total Forecasts",
     notEnough: (n: number, min: number) => `Not enough resolved forecasts yet (${n}/${min}).`,
+    outOfSample: "Out-of-sample (live only)",
+    outOfSampleTip:
+      "The number above includes forecast_runs seeded by a historical backfill, using the same past price/score data the model's own coefficients were fit from -- in-sample, like reporting a regression's training accuracy. This line counts only forecasts the live hourly cron produced after that fit: genuinely unseen data.",
+    outOfSampleNotEnough: (n: number, min: number) => `${n}/${min} live forecasts resolved so far -- not enough yet for a real number.`,
     chart: (h: string) => `Forecast vs. Actual (${h})`,
     chartLegendPredicted: "Predicted",
     chartLegendActual: "Actual",
@@ -50,6 +54,10 @@ const STR = {
     rangeHit: "อยู่ในช่วงที่พยากรณ์",
     totalForecasts: "จำนวนพยากรณ์ทั้งหมด",
     notEnough: (n: number, min: number) => `ยังมีผลลัพธ์ไม่พอ (${n}/${min})`,
+    outOfSample: "Out-of-sample (เฉพาะของจริงที่เกิดหลัง calibrate)",
+    outOfSampleTip:
+      "ตัวเลขด้านบนรวมแถวที่ backfill ย้อนหลังจากราคา/คะแนนชุดเดียวกับที่ใช้ fit สัมประสิทธิ์ของโมเดลเอง -- เหมือนวัด accuracy บนชุดข้อมูลที่ใช้ train เอง แถวนี้นับเฉพาะพยากรณ์จริงที่ cron รายชั่วโมงสร้างขึ้นหลังจาก calibrate แล้ว -- เป็นข้อมูลที่โมเดลไม่เคยเห็นจริงๆ",
+    outOfSampleNotEnough: (n: number, min: number) => `มีผลจริง ${n}/${min} ครั้ง -- ยังไม่พอสำหรับตัวเลขจริง`,
     chart: (h: string) => `พยากรณ์ vs ตัวเลขจริง (${h})`,
     chartLegendPredicted: "พยากรณ์",
     chartLegendActual: "จริง",
@@ -181,6 +189,24 @@ export default async function PerformancePage() {
                     label={`${t.beatsBaseline}: ${group.beatsBaseline.directionally ? t.yes : t.no}`}
                     tone={group.beatsBaseline.directionally ? "emerald" : "red"}
                   />
+
+                  <div className="pt-2 border-t border-v2-border">
+                    <p className="text-[11px] text-v2-muted mb-1" title={t.outOfSampleTip}>
+                      {t.outOfSample}
+                    </p>
+                    {group.outOfSample.insufficientData ? (
+                      <p className="text-xs text-v2-muted">
+                        {t.outOfSampleNotEnough(group.outOfSample.sampleSize, 20)}
+                      </p>
+                    ) : (
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-v2-muted">{t.accuracy}</span>
+                        <span className="font-mono text-v2-foreground">
+                          {((group.outOfSample.model.directionalAccuracy ?? 0) * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </Card>

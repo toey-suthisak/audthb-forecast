@@ -10,31 +10,18 @@ type GoldApiResponse = {
   updatedAt?: string;
 };
 
-type BrentBenchmark = {
-  roll_method?: string;
-  observed_at?: string;
-  source_tier?: string;
-};
-
-type BrentPrice = {
-  price?: number;
-  code?: string;
-
-  as_of?: string;
-  created_at?: string;
-  collected_at?: string;
-
-  stale?: boolean;
-  synthetic?: boolean;
-
-  benchmark?: BrentBenchmark;
-};
-
-type OilPriceHistoryResponse = {
+type BrentLatestResponse = {
   status?: string;
 
   data?: {
-    prices?: BrentPrice[];
+    price?: number;
+    code?: string;
+
+    as_of?: string;
+    collected_at?: string;
+
+    stale?: boolean;
+    synthetic?: boolean;
   };
 };
 
@@ -226,20 +213,19 @@ async function fetchGold(): Promise<ProviderResult> {
 // =========================================================
 // BRENT
 //
-// We use past_day because it lets us select one consistent
-// benchmark stream.
-//
-// IMPORTANT:
-// We DO NOT save the whole past_day history every hour.
-//
-// We only select the newest clean observation:
-//
-// synthetic = false
-// stale = false
-// publisher_managed_front_month
-// publisher_primary
-//
-// History has already been bootstrapped.
+// Used /v1/prices/past_day until 2026-09-24, filtered down to
+// one clean (non-synthetic, non-stale, publisher-primary)
+// observation. That endpoint silently stopped writing new rows
+// from 2026-09-21 09:15 UTC onward -- root-caused live against
+// the real API (HTTP 402, "Historical data requires paid
+// access... Your 7-day trial has ended", the exact same minute
+// as the last successful ingest). OilPriceAPI's own error body
+// confirms /v1/prices/latest stays on the Free tier, so this
+// now calls that instead -- same free endpoint app/api/iron-ore
+// already uses (added 2026-09-21, unaffected by this because it
+// was never on the paid endpoint). /latest returns one object,
+// not an array, so there's no "pick the newest of many" step
+// anymore -- just validate this one observation is real.
 // =========================================================
 
 async function fetchBrentLatestClean(
@@ -248,7 +234,7 @@ async function fetchBrentLatestClean(
   try {
     const response =
       await fetch(
-        "https://api.oilpriceapi.com/v1/prices/past_day?by_code=BRENT_CRUDE_USD",
+        "https://api.oilpriceapi.com/v1/prices/latest?by_code=BRENT_CRUDE_USD",
         {
           cache: "no-store",
 
@@ -276,118 +262,30 @@ async function fetchBrentLatestClean(
     }
 
     const payload =
-      (await response.json()) as OilPriceHistoryResponse;
+      (await response.json()) as BrentLatestResponse;
+
+    const data =
+      payload.data;
+
+    const price =
+      Number(
+        data?.price
+      );
 
     if (
       payload.status !==
-      "success"
+        "success" ||
+      !data ||
+      data.code !==
+        "BRENT_CRUDE_USD" ||
+      data.synthetic !==
+        false ||
+      data.stale !==
+        false ||
+      !Number.isFinite(
+        price
+      )
     ) {
-      return {
-        symbol:
-          "BRENT_LIVE_USD",
-
-        observation:
-          null,
-
-        error:
-          "OilPriceAPI returned non-success status",
-      };
-    }
-
-    const rawPrices =
-      payload.data?.prices ??
-      [];
-
-    const cleanPrices =
-      rawPrices
-        .filter((item) => {
-          return (
-            item.code ===
-              "BRENT_CRUDE_USD" &&
-
-            item.synthetic ===
-              false &&
-
-            item.stale ===
-              false &&
-
-            item.benchmark
-              ?.roll_method ===
-              "publisher_managed_front_month" &&
-
-            item.benchmark
-              ?.source_tier ===
-              "publisher_primary" &&
-
-            Number.isFinite(
-              Number(
-                item.price
-              )
-            )
-          );
-        })
-
-        .map((item) => {
-          const rawTimestamp =
-            item.as_of ??
-            item.benchmark
-              ?.observed_at ??
-            item.created_at ??
-            item.collected_at ??
-            null;
-
-          if (!rawTimestamp) {
-            return null;
-          }
-
-          const timestamp =
-            new Date(
-              rawTimestamp
-            );
-
-          if (
-            Number.isNaN(
-              timestamp.getTime()
-            )
-          ) {
-            return null;
-          }
-
-          return {
-            price:
-              Number(
-                item.price
-              ),
-
-            marketTimestamp:
-              timestamp.toISOString(),
-          };
-        })
-
-        .filter(
-          (
-            item
-          ): item is {
-            price: number;
-            marketTimestamp: string;
-          } =>
-            item !== null
-        )
-
-        .sort(
-          (a, b) =>
-            new Date(
-              b.marketTimestamp
-            ).getTime() -
-            new Date(
-              a.marketTimestamp
-            ).getTime()
-        );
-
-    const latest =
-      cleanPrices[0];
-
-    if (!latest) {
       return {
         symbol:
           "BRENT_LIVE_USD",
@@ -400,6 +298,46 @@ async function fetchBrentLatestClean(
       };
     }
 
+    const rawTimestamp =
+      data.as_of ??
+      data.collected_at ??
+      null;
+
+    if (!rawTimestamp) {
+      return {
+        symbol:
+          "BRENT_LIVE_USD",
+
+        observation:
+          null,
+
+        error:
+          "Missing Brent as_of timestamp",
+      };
+    }
+
+    const timestamp =
+      new Date(
+        rawTimestamp
+      );
+
+    if (
+      Number.isNaN(
+        timestamp.getTime()
+      )
+    ) {
+      return {
+        symbol:
+          "BRENT_LIVE_USD",
+
+        observation:
+          null,
+
+        error:
+          "Invalid Brent timestamp",
+      };
+    }
+
     return {
       symbol:
         "BRENT_LIVE_USD",
@@ -408,14 +346,13 @@ async function fetchBrentLatestClean(
         symbol:
           "BRENT_LIVE_USD",
 
-        price:
-          latest.price,
+        price,
 
         marketTimestamp:
-          latest.marketTimestamp,
+          timestamp.toISOString(),
 
         source:
-          "OilPriceAPI publisher_primary",
+          "OilPriceAPI latest",
       },
 
       error: null,
