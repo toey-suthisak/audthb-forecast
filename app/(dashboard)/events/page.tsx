@@ -1,10 +1,9 @@
-import { Fragment } from "react";
 import Card from "@/components/v2/Card";
 import BadgeChip from "@/components/v2/BadgeChip";
+import EventDayBar from "@/components/v2/EventDayBar";
 import { getLocale } from "@/lib/i18n-server";
 import { getFfWeeklyCalendar } from "@/lib/ff-weekly-calendar-data";
 import { getRecentEconomicOutcomes } from "@/lib/economic-consensus-data";
-import { tLabel } from "@/lib/i18n";
 import type { ChipTone } from "@/components/v2/BadgeChip";
 
 export const dynamic = "force-dynamic";
@@ -12,8 +11,9 @@ export const dynamic = "force-dynamic";
 const STR = {
   en: {
     title: "Economic Calendar & Event Impact",
-    subtitle: "This week's real ForexFactory calendar, plus what happened after HIGH-impact events already released.",
-    calendar: "This Week",
+    subtitle: "Real ForexFactory calendar, day by day, plus what happened after HIGH-impact events already released.",
+    calendar: "Calendar",
+    coverage: (from: string, to: string, fetched: string) => `Real coverage: ${from} to ${to} -- refreshed daily by cron, last updated ${fetched} (Bangkok). Pick a day below.`,
     colTime: "Time",
     colCurrency: "Currency",
     colEvent: "Event",
@@ -23,6 +23,8 @@ const STR = {
     colActual: "Actual",
     allDay: "All day",
     noTime: "--",
+    today: "Today",
+    noEventsThisDay: "No AUD/USD/THB-relevant events on this day.",
     reaction: "Event Reaction (Released This Week)",
     reactionNote: "Actual vs. forecast (surprise) and actual vs. previous (trend) for HIGH-impact AUD/USD/THB events already released -- both shown since they can disagree.",
     noReleases: "No HIGH-impact AUD/USD/THB events have released yet since this project started tracking (2026-09-20) -- this fills in automatically once real releases happen.",
@@ -31,8 +33,9 @@ const STR = {
   },
   th: {
     title: "ปฏิทินเศรษฐกิจ & ผลกระทบข่าว",
-    subtitle: "ปฏิทิน ForexFactory จริงของสัปดาห์นี้ พร้อมสิ่งที่เกิดขึ้นจริงหลังข่าวผลกระทบสูงที่ประกาศไปแล้ว",
-    calendar: "สัปดาห์นี้",
+    subtitle: "ปฏิทิน ForexFactory จริง แยกเลือกดูเป็นรายวัน พร้อมสิ่งที่เกิดขึ้นจริงหลังข่าวผลกระทบสูงที่ประกาศไปแล้ว",
+    calendar: "ปฏิทิน",
+    coverage: (from: string, to: string, fetched: string) => `ช่วงข้อมูลจริงที่มี: ${from} ถึง ${to} -- อัปเดตอัตโนมัติทุกวันผ่าน cron ล่าสุดเมื่อ ${fetched} (เวลากรุงเทพฯ) เลือกวันที่ด้านล่างได้เลย`,
     colTime: "เวลา",
     colCurrency: "สกุลเงิน",
     colEvent: "ข่าว",
@@ -42,6 +45,8 @@ const STR = {
     colActual: "จริง",
     allDay: "ทั้งวัน",
     noTime: "--",
+    today: "วันนี้",
+    noEventsThisDay: "ไม่มีข่าวที่เกี่ยวกับ AUD/USD/THB ในวันนี้",
     reaction: "ผลกระทบข่าว (ที่ประกาศแล้วสัปดาห์นี้)",
     reactionNote: "เทียบตัวเลขจริงกับคาดการณ์ (เซอร์ไพรส์หรือไม่) และเทียบตัวเลขจริงกับครั้งก่อน (แนวโน้ม) สำหรับข่าวผลกระทบสูงของ AUD/USD/THB ที่ประกาศไปแล้ว -- โชว์ทั้งคู่เพราะอาจขัดกันได้",
     noReleases: "ยังไม่มีข่าวผลกระทบสูงของ AUD/USD/THB ประกาศจริงเลยตั้งแต่เริ่มเก็บข้อมูล (2026-09-20) -- จะขึ้นอัตโนมัติเมื่อมีข่าวประกาศจริง",
@@ -49,13 +54,6 @@ const STR = {
     vsPrevious: "เทียบครั้งก่อน",
   },
 } as const;
-
-function impactTone(impact: string): ChipTone {
-  if (impact === "High") return "red";
-  if (impact === "Medium") return "amber";
-  if (impact === "Holiday") return "slate";
-  return "slate";
-}
 
 function leanTone(lean: string | null): ChipTone {
   if (lean === "BULLISH") return "emerald";
@@ -71,6 +69,17 @@ export default async function EventsPage() {
     getFfWeeklyCalendar(locale),
     getRecentEconomicOutcomes(),
   ]);
+
+  const todayIso = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const lastFetchedLabel = calendar.fetchedAt
+    ? new Intl.DateTimeFormat(locale === "th" ? "th-TH" : "en-GB", {
+        timeZone: "Asia/Bangkok",
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date(calendar.fetchedAt))
+    : "--";
 
   return (
     <div className="space-y-6">
@@ -107,46 +116,32 @@ export default async function EventsPage() {
       <Card title={t.calendar} padded={false}>
         {calendar.error ? (
           <p className="text-sm text-red-600 dark:text-red-400 p-5">{calendar.error}</p>
+        ) : calendar.byDate.length === 0 ? (
+          <p className="text-sm text-v2-muted p-5">{t.noEventsThisDay}</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-v2-muted border-b border-v2-border">
-                  <th className="px-5 py-2.5 font-medium">{t.colTime}</th>
-                  <th className="px-5 py-2.5 font-medium">{t.colCurrency}</th>
-                  <th className="px-5 py-2.5 font-medium">{t.colEvent}</th>
-                  <th className="px-5 py-2.5 font-medium">{t.colImpact}</th>
-                  <th className="px-5 py-2.5 font-medium hidden sm:table-cell">{t.colForecast}</th>
-                  <th className="px-5 py-2.5 font-medium hidden sm:table-cell">{t.colPrevious}</th>
-                  <th className="px-5 py-2.5 font-medium hidden md:table-cell">{t.colActual}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {calendar.byDate.map((day) => (
-                  <Fragment key={day.date}>
-                    <tr className="bg-slate-50 dark:bg-slate-800/40">
-                      <td colSpan={7} className="px-5 py-1.5 text-xs font-semibold text-v2-muted">
-                        {day.date}
-                      </td>
-                    </tr>
-                    {day.events.map((event, i) => (
-                      <tr key={`${day.date}-${i}`} className="border-b border-v2-border last:border-b-0">
-                        <td className="px-5 py-2 text-v2-muted whitespace-nowrap">{event.eventTime ?? t.allDay}</td>
-                        <td className="px-5 py-2 text-v2-foreground font-medium">{event.currency}</td>
-                        <td className="px-5 py-2 text-v2-foreground">{event.eventName}</td>
-                        <td className="px-5 py-2">
-                          <BadgeChip label={tLabel(event.impact.toUpperCase(), locale)} tone={impactTone(event.impact)} />
-                        </td>
-                        <td className="px-5 py-2 font-mono text-v2-muted hidden sm:table-cell">{event.forecastValue ?? t.noTime}</td>
-                        <td className="px-5 py-2 font-mono text-v2-muted hidden sm:table-cell">{event.previousValue ?? t.noTime}</td>
-                        <td className="px-5 py-2 font-mono text-v2-foreground hidden md:table-cell">{event.actualValue ?? t.noTime}</td>
-                      </tr>
-                    ))}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <p className="text-xs text-v2-muted px-5 pt-4">
+              {t.coverage(calendar.byDate[0].date, calendar.byDate[calendar.byDate.length - 1].date, lastFetchedLabel)}
+            </p>
+            <EventDayBar
+              days={calendar.byDate}
+              locale={locale}
+              todayIso={todayIso}
+              t={{
+                colTime: t.colTime,
+                colCurrency: t.colCurrency,
+                colEvent: t.colEvent,
+                colImpact: t.colImpact,
+                colForecast: t.colForecast,
+                colPrevious: t.colPrevious,
+                colActual: t.colActual,
+                allDay: t.allDay,
+                noTime: t.noTime,
+                today: t.today,
+                noEventsThisDay: t.noEventsThisDay,
+              }}
+            />
+          </>
         )}
       </Card>
     </div>

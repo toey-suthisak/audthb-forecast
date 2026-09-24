@@ -1245,3 +1245,45 @@ tab shows all 7 factors with real weights (35/20/14/4/5/10/0%),
 contributions, colored bars, and full inline text -- matching Dashboard's
 numbers exactly. Checked 375px mobile: no overflow. `npx tsc --noEmit`
 and `npx next build` both pass clean.
+
+## Events page: day-picker bar instead of one long scrolling table (2026-09-24)
+
+User: "หน้า event ให้เป็นแถบที่สามารถเลือกวันที่ได้ ไม่ได้อัปเดตข้อมูลที่ออกมาแล้วทุกวันหรอ"
+(make the Events page a bar you can pick a date from; doesn't it update
+released data every day?).
+
+On the update question: confirmed yes -- `app/api/economic-consensus/
+route.ts`'s cron runs once/day, re-fetches FF's `ff_calendar_thisweek.xml`
+feed, and `upsert`s into both `economic_consensus` and
+`ff_weekly_calendar` on every run, `actual_value` included. Checked
+Supabase directly: `ff_weekly_calendar` currently spans real
+2026-09-20 to 2026-09-26 (81 rows), `fetched_at` = 2026-09-24 00:10 UTC
+(today) -- so Actual does get refreshed daily; it just doesn't show
+anything for events that genuinely haven't released yet (2026-09-24's
+AUD Employment Change hasn't printed at time of writing).
+
+Built `components/v2/EventDayBar.tsx` (new client component): a
+horizontal pill bar, one real date per pill (from `calendar.byDate`,
+whatever the table currently holds -- not synthesized), defaults to
+today's real Bangkok-local date if present, marks it with a dot +
+"(Today)" label, and filters the table below to just that day instead
+of one long table with sticky date-group headers. `app/(dashboard)/
+events/page.tsx` now also shows a real coverage line ("Real coverage:
+2026-09-20 to 2026-09-26 -- refreshed daily by cron, last updated ...")
+computed from the actual min/max dates present, so the honest limit
+(only ~1 week of real history exists so far, since the FF feed itself
+is always "this week" and `ff_weekly_calendar` only grows as the daily
+cron keeps upserting) is stated rather than implied.
+
+Hit one server/client boundary bug during the build: passing the whole
+translation object (which included a `coverage` function) down to the
+new client component threw "Functions cannot be passed directly to
+Client Components" -- fixed by passing only the plain-string subset
+`EventDayBar` actually needs.
+
+Verified live: pill bar shows real dates (Sun 20 through Sat 26 -- 7 EN
+labels, 7 Thai weekday labels), defaults to today (Thu 24) with all of
+today's real AUD/USD/THB-relevant events, clicking Fri 25 correctly
+swaps the table to Friday's real events. Checked 375px mobile: pill bar
+scrolls horizontally, no page overflow. `npx tsc --noEmit` and
+`npx next build` both pass clean.
