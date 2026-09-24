@@ -1123,3 +1123,35 @@ end at almost the same height as the chart card beside them (no more
 large dead-space gap); the new card's tile grid reads cleanly. Checked
 375px mobile: 2-column tile grid, no overflow. `npx tsc --noEmit` and
 `npx next build` both pass clean.
+
+## Today's Outlook: replaced pivot R1/S1 breakout boxes with the calibrated DAILY range (2026-09-24)
+
+User: "Today's Outlook กว้างไป แทบไม่เกิดขึ้นจริงในวัน" (too wide,
+rarely actually happens within the day). Investigated with real data
+before changing anything: backtested the classic pivot's R1/S1 against
+this project's own real daily bars (13 real days) -- R1/S1 individually
+get touched roughly half the days, so "never happens" wasn't literally
+true, but R1/S1 are computed from the *previous full day's entire
+high-low range*, which is often a bigger move than a typical day
+actually makes. Checked live: today (2026-09-24) price sat at 23.4958
+while R1 required a 0.34% move to reach -- a real, meaningful move,
+not a near-miss -- so on any single trending day, whichever side is
+counter-trend routinely looks unreachable, matching the complaint.
+
+Fix: swapped the R1/S1 boxes for the DAILY forecast's own predicted
+range (`technicalOutlook.forecasts.find(h => h.horizon === "DAILY")`)
+-- already real, already calibrated to the actual historical move size
+(`REFERENCE_DAILY_RANGE_PCT`, forecast-data.ts), and already shown
+elsewhere on the page. Extended `ForecastEntry.trackRecord` (technical-
+outlook-data.ts) with a new `intervalCoveragePct` field, sourced from
+`evaluation-data.ts`'s existing `intervalCoverage` stat (the same "range
+hit rate" already on the Performance tab) -- so the card can now state
+outright how often this exact range has held historically, instead of
+presenting an untested guess.
+
+Verified live: today's real range shows Prefund 23.4106 / Postfund
+23.5939 (current price 23.4958 sits inside it), with "ช่วงนี้ตรงกับ
+ราคาจริง 92.9% จาก 140 ครั้งล่าสุดที่มีผลแล้ว" -- cross-checked the 140
+directly against Supabase (`forecast_outcomes` MATCHED count for
+DAILY/1.0.1) and it matches exactly. Confirmed no 375px mobile
+overflow. `npx tsc --noEmit` and `npx next build` both pass clean.

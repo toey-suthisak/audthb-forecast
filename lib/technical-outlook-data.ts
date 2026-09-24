@@ -227,6 +227,13 @@ export type ForecastEntry = {
     insufficientData: boolean;
     directionalAccuracyPct: number | null;
     baselineAccuracyPct: number | null;
+    // Real % of past resolved forecasts where the actual outcome landed
+    // inside the predicted range (lib/evaluation-data.ts's
+    // intervalCoverage) -- same "อยู่ในช่วงที่พยากรณ์" stat already shown
+    // on the Performance tab, just piped through here too so the
+    // Dashboard can state how often this specific range has actually
+    // held, instead of presenting it as an untested guess.
+    intervalCoveragePct: number | null;
   } | null;
 };
 
@@ -576,6 +583,10 @@ export async function getTechnicalOutlook(
                   baselineAccuracyPct:
                     trackRecordGroup.baselineNoChange.directionalAccuracy !== null
                       ? round(trackRecordGroup.baselineNoChange.directionalAccuracy * 100, 1)
+                      : null,
+                  intervalCoveragePct:
+                    trackRecordGroup.model.intervalCoverage !== null
+                      ? round(trackRecordGroup.model.intervalCoverage * 100, 1)
                       : null,
                 }
               : null,

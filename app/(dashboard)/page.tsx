@@ -47,8 +47,9 @@ const STR = {
     confidence: "Confidence",
     scoreDetails: "Score details",
     outlookToday: "Today's Outlook",
-    breakoutUp: "If it breaks above",
-    breakoutDown: "If it breaks below",
+    dailyRangeLabel: "Today's calibrated forecast range (DAILY, next 24h)",
+    rangeAccuracy: (pct: number, n: number) => `This range has held ${pct.toFixed(1)}% of the time across the last ${n} resolved DAILY forecasts.`,
+    rangeAccuracyNotEnough: "Not enough resolved DAILY forecasts yet to state a real hit rate.",
     postfund: "Postfund",
     prefund: "Prefund",
     postfundHint: "benefits from a weaker THB",
@@ -103,7 +104,7 @@ const STR = {
     tip: {
       rate: "The latest real AUD/THB rate from TwelveData, plus today's intraday high/low and % change vs. the last completed day's close.",
       fxScore: "This app's own composite score (-100..+100) blending 7 weighted real signals (price momentum, cross-currency, relative market, commodity, mean reversion, macro/policy, risk) into one number.",
-      outlookToday: "A plain-language read of the Core FX Score's current bias, plus the real pivot levels (R1/S1) that would need to break for that bias to strengthen.",
+      outlookToday: "A plain-language read of the Core FX Score's current bias, plus today's real calibrated DAILY forecast range and how often that range has actually held historically.",
       priceTechnical: "Daily-bar price history for AUD/THB with classic pivot support/resistance levels computed from the last completed day.",
       technicalLevels: "Classic floor-trader pivot points (Pivot, R1-R2, S1-S2) computed from the most recently completed day's high/low/close.",
       technicalSignals: "Simple moving averages and RSI computed from this app's own real daily price history -- periods shrink automatically while less history exists.",
@@ -126,8 +127,9 @@ const STR = {
     confidence: "ความมั่นใจ",
     scoreDetails: "ดูรายละเอียดคะแนน",
     outlookToday: "มุมมองวันนี้",
-    breakoutUp: "ถ้าทะลุ",
-    breakoutDown: "ถ้าหลุด",
+    dailyRangeLabel: "ช่วงคาดการณ์วันนี้ที่ผ่านการปรับเทียบ (DAILY, 24 ชม.ถัดไป)",
+    rangeAccuracy: (pct: number, n: number) => `ช่วงนี้ตรงกับราคาจริง ${pct.toFixed(1)}% จาก ${n} ครั้งล่าสุดที่มีผลแล้ว`,
+    rangeAccuracyNotEnough: "ข้อมูลผลลัพธ์ DAILY ยังไม่พอสำหรับบอก hit rate จริง",
     postfund: "Postfund",
     prefund: "Prefund",
     postfundHint: "ได้ประโยชน์หากบาทอ่อนค่า",
@@ -182,7 +184,7 @@ const STR = {
     tip: {
       rate: "ราคา AUD/THB ล่าสุดจริงจาก TwelveData พร้อมสูงสุด-ต่ำสุดวันนี้ และ % เปลี่ยนแปลงเทียบราคาปิดวันก่อนหน้าที่สมบูรณ์แล้ว",
       fxScore: "คะแนนรวมของระบบนี้เอง (-100..+100) ผสม 7 ปัจจัยถ่วงน้ำหนักจริง (ราคา/โมเมนตัม, ค่าเงินคู่อื่น, ตลาดเปรียบเทียบ, สินค้าโภคภัณฑ์, การย้อนกลับค่าเฉลี่ย, มหภาค/นโยบาย, ความเสี่ยง) เป็นตัวเลขเดียว",
-      outlookToday: "สรุปทิศทางปัจจุบันของ Core FX Score เป็นภาษาง่าย ๆ พร้อมระดับ pivot จริง (R1/S1) ที่ต้องทะลุเพื่อให้ทิศทางนั้นชัดเจนขึ้น",
+      outlookToday: "สรุปทิศทางปัจจุบันของ Core FX Score เป็นภาษาง่าย ๆ พร้อมช่วงคาดการณ์ DAILY วันนี้ที่ผ่านการปรับเทียบจริง และสถิติจริงว่าช่วงนี้ตรงบ่อยแค่ไหน",
       priceTechnical: "ราคา AUD/THB รายวันจริง พร้อมแนวรับ-แนวต้าน (pivot) แบบคลาสสิกที่คำนวณจากวันล่าสุดที่ข้อมูลสมบูรณ์แล้ว",
       technicalLevels: "จุด pivot แบบคลาสสิก (Pivot, R1-R2, S1-S2) คำนวณจากราคาสูงสุด/ต่ำสุด/ปิดของวันล่าสุดที่สมบูรณ์แล้ว",
       technicalSignals: "เส้นค่าเฉลี่ยเคลื่อนที่และ RSI คำนวณจากข้อมูลราคารายวันจริงของระบบนี้ -- ช่วงเวลาจะปรับลดอัตโนมัติขณะที่ข้อมูลย้อนหลังยังมีไม่มาก",
@@ -346,6 +348,18 @@ export default async function DashboardPage() {
         ? "up"
         : "down";
 
+  // Today's Outlook used to show the classic pivot's R1/S1 as "if price
+  // breaks this, Postfund/Prefund" -- but those are computed from the
+  // *previous full day's* high/low range, which is often a bigger move
+  // than a typical day actually makes, so one side routinely looked
+  // unreachable ("กว้างไป แทบไม่เกิดขึ้นจริงในวัน", per user feedback).
+  // The DAILY forecast's own predicted range is calibrated to the real
+  // historical move size instead (see forecast-data.ts's
+  // REFERENCE_DAILY_RANGE_PCT), and its real interval-coverage track
+  // record (same stat Performance's "อยู่ในช่วงที่พยากรณ์" already shows)
+  // can state outright how often this specific range has actually held.
+  const dailyForecast = technicalOutlook.forecasts.find((f) => f.horizon === "DAILY") ?? null;
+
   return (
     <div className="relative space-y-8">
       <div className="pointer-events-none absolute inset-x-0 -top-6 -z-10 flex justify-center overflow-hidden">
@@ -437,22 +451,28 @@ export default async function DashboardPage() {
           </p>
           <p className="text-xs text-v2-muted mt-2 leading-relaxed">{technicalOutlook.actionBias.note}</p>
 
-          {technicalOutlook.pivots && (
-            <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-v2-border">
-              <div className="rounded-lg bg-emerald-50 dark:bg-emerald-500/10 p-2.5">
-                <p className="text-[11px] text-emerald-700 dark:text-emerald-400">
-                  {t.breakoutUp} {technicalOutlook.pivots.r1.toFixed(4)}
-                </p>
-                <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">{t.postfund}</p>
-                <p className="text-[10px] text-emerald-600/80 dark:text-emerald-400/70">{t.postfundHint}</p>
+          {dailyForecast && dailyForecast.priceRange && (
+            <div className="mt-4 pt-4 border-t border-v2-border">
+              <p className="text-[11px] text-v2-muted mb-2">{t.dailyRangeLabel}</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-lg bg-red-50 dark:bg-red-500/10 p-2.5">
+                  <p className="text-[11px] text-red-700 dark:text-red-400">{t.prefund}</p>
+                  <p className="font-mono text-sm font-semibold text-red-700 dark:text-red-400">{dailyForecast.priceRange.low.toFixed(4)}</p>
+                  <p className="text-[10px] text-red-600/80 dark:text-red-400/70">{t.prefundHint}</p>
+                </div>
+                <div className="rounded-lg bg-emerald-50 dark:bg-emerald-500/10 p-2.5">
+                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400">{t.postfund}</p>
+                  <p className="font-mono text-sm font-semibold text-emerald-700 dark:text-emerald-400">{dailyForecast.priceRange.high.toFixed(4)}</p>
+                  <p className="text-[10px] text-emerald-600/80 dark:text-emerald-400/70">{t.postfundHint}</p>
+                </div>
               </div>
-              <div className="rounded-lg bg-red-50 dark:bg-red-500/10 p-2.5">
-                <p className="text-[11px] text-red-700 dark:text-red-400">
-                  {t.breakoutDown} {technicalOutlook.pivots.s1.toFixed(4)}
+              {dailyForecast.trackRecord && !dailyForecast.trackRecord.insufficientData && dailyForecast.trackRecord.intervalCoveragePct !== null ? (
+                <p className="text-[11px] text-v2-muted mt-2 leading-relaxed">
+                  {t.rangeAccuracy(dailyForecast.trackRecord.intervalCoveragePct, dailyForecast.trackRecord.sampleSize)}
                 </p>
-                <p className="text-sm font-semibold text-red-700 dark:text-red-400">{t.prefund}</p>
-                <p className="text-[10px] text-red-600/80 dark:text-red-400/70">{t.prefundHint}</p>
-              </div>
+              ) : (
+                <p className="text-[11px] text-v2-muted mt-2">{t.rangeAccuracyNotEnough}</p>
+              )}
             </div>
           )}
         </Card>
