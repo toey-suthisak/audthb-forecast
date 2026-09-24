@@ -3,7 +3,6 @@ import { getLocale } from "@/lib/i18n-server";
 import { getDashboardData } from "@/lib/dashboard-data";
 import { getTechnicalOutlook } from "@/lib/technical-outlook-data";
 import { getScoreExplained } from "@/lib/score-explained-data";
-import { getEconomicConsensus, getRecentEconomicOutcomes } from "@/lib/economic-consensus-data";
 import { getCorrelations } from "@/lib/correlation-data";
 import { getLongTermTechnicals } from "@/lib/long-term-technicals-data";
 
@@ -12,11 +11,11 @@ export const dynamic = "force-dynamic";
 const STR = {
   en: {
     title: "Analysis",
-    subtitle: "Price, drivers, technical levels, event impact, and correlation -- all from this app's own real data.",
+    subtitle: "Price, technical levels, drivers, and correlation -- all from this app's own real data.",
   },
   th: {
     title: "วิเคราะห์",
-    subtitle: "ราคา ปัจจัยขับเคลื่อน แนวรับ-แนวต้าน ผลกระทบข่าว และความสัมพันธ์เชิงสถิติ -- ทั้งหมดจากข้อมูลจริงของแอปนี้",
+    subtitle: "ราคา แนวรับ-แนวต้าน ปัจจัยขับเคลื่อน และความสัมพันธ์เชิงสถิติ -- ทั้งหมดจากข้อมูลจริงของแอปนี้",
   },
 } as const;
 
@@ -25,17 +24,12 @@ export default async function AnalysisPage() {
   const t = STR[locale];
 
   const data = await getDashboardData();
-  const [technicalOutlook, scoreExplained, consensus, outcomes, correlations, longTermTechnicals] = await Promise.all([
+  const [technicalOutlook, scoreExplained, correlations, longTermTechnicals] = await Promise.all([
     getTechnicalOutlook(locale, data),
     getScoreExplained(data),
-    getEconomicConsensus(),
-    getRecentEconomicOutcomes(),
     getCorrelations(),
     getLongTermTechnicals(locale),
   ]);
-
-  const upcoming = consensus.events.filter((e) => e.impact === "HIGH" && e.forecastValue !== null && e.actualValue === null);
-  const released = outcomes.events.filter((e) => e.impact === "HIGH");
 
   return (
     <div className="space-y-6">
@@ -48,8 +42,6 @@ export default async function AnalysisPage() {
         locale={locale}
         technicalOutlook={technicalOutlook}
         scoreExplained={scoreExplained}
-        releasedEvents={released}
-        upcomingEvents={upcoming}
         correlations={correlations}
         longTermTechnicals={longTermTechnicals}
       />

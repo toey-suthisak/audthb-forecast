@@ -1155,3 +1155,50 @@ Verified live: today's real range shows Prefund 23.4106 / Postfund
 directly against Supabase (`forecast_outcomes` MATCHED count for
 DAILY/1.0.1) and it matches exactly. Confirmed no 375px mobile
 overflow. `npx tsc --noEmit` and `npx next build` both pass clean.
+
+## Analysis tab: merged Technical into Price & Chart, merged Why-is-it-moving into Drivers, removed Event Impact, added explanatory tooltips everywhere (2026-09-24)
+
+User feedback on the Analysis page's 6 sub-tabs (Price & Chart / Drivers /
+Why is it moving? / Event Impact / Technical / Correlation): fold
+Technical into Price & Chart, fold Drivers + Why is it moving? into one
+tab, remove Event Impact, explain every real number's what/how/why-it-
+matters/why-this-method in a tooltip, and clarify what Correlation is.
+
+Restructured `components/v2/AnalysisTabs.tsx` down to 3 sub-tabs:
+- **Price & Chart**: the price chart (pivots overlaid) + the pivot/SMA/
+  RSI numeric card (formerly the separate "Technical" tab) + the 3-month
+  RSI/MA50/MA200 chart + the 6-month MACD chart, all stacked in one tab.
+- **Drivers**: the FX Score factor-attribution card (formerly "Drivers")
+  + the ~24h-change narrative (formerly "Why is it moving?"), stacked.
+- **Correlation**: unchanged content, now with a tooltip too.
+
+Removed the "Event Impact" tab and its now-dead data plumbing --
+`app/(dashboard)/analysis/page.tsx` no longer calls
+`getEconomicConsensus()`/`getRecentEconomicOutcomes()` or builds
+`upcoming`/`released`, and `AnalysisTabs` no longer takes
+`releasedEvents`/`upcomingEvents` props. (Dashboard's own "Today's
+Events" card still uses `getEconomicConsensus()` independently --
+untouched.)
+
+Added `InfoTooltip` (existing CSS-only "i" tooltip component, already
+used on the Dashboard) next to every card/metric on the page, each
+covering what it is, how it's computed, why it matters, and why that
+specific method/source was chosen over an alternative -- e.g. why
+classic floor-trader pivots over an ML-based level (transparent,
+hand-verifiable formula), why RBA F11.1 for the 3/6-month studies
+(only real source with 900+ days of history), why Pearson correlation
+on 15+ real overlapping days for Correlation (independent, data-driven
+check vs. what the FX Score's own weights assume). The 7 FX Score
+factor rows (Drivers tab) each got their own tooltip with real weight
++ definition, reusing the exact facts already documented on the About
+tab (Price/Momentum 35%, Cross Currency 20%, Relative Market 15%,
+Commodity 8%, Mean Reversion 5%, Macro/Policy 10%, Risk/VIXY 7%) so
+the two pages can't drift apart.
+
+Verified live: all 3 tabs render with real data (Price & Chart shows
+R3-S3 pivots + SMA(5)/RSI(12) + 3M RSI/MA chart + 6M MACD chart;
+Drivers shows factor contributions summing correctly + narrative;
+Correlation correctly shows "needs 15+ overlapping days" for all 6
+pairs since real price history is still only ~14 days old). Checked
+375px mobile: no horizontal overflow. `npx tsc --noEmit` and
+`npx next build` both pass clean.

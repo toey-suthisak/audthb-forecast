@@ -3,13 +3,13 @@
 import { useState } from "react";
 import Card from "@/components/v2/Card";
 import BadgeChip from "@/components/v2/BadgeChip";
+import InfoTooltip from "@/components/v2/InfoTooltip";
 import RangeChart from "@/components/v2/RangeChart";
 import PriceMaRsiChart from "@/components/v2/PriceMaRsiChart";
 import MacdChart from "@/components/v2/MacdChart";
 import type { ChipTone } from "@/components/v2/BadgeChip";
 import type { TechnicalOutlook } from "@/lib/technical-outlook-data";
 import type { ScoreExplained } from "@/lib/score-explained-data";
-import type { ReleasedEvent, ConsensusEvent } from "@/lib/economic-consensus-data";
 import type { CorrelationRow } from "@/lib/correlation-data";
 import type { LongTermTechnicals } from "@/lib/long-term-technicals-data";
 import type { FactorKey } from "@/lib/score-factors";
@@ -25,30 +25,25 @@ const FACTOR_LABELS: Record<FactorKey, { en: string; th: string }> = {
   risk: { en: "Risk / VIXY", th: "ความเสี่ยง / VIXY" },
 };
 
-const SUB_TABS = ["price", "drivers", "why", "events", "technical", "correlation"] as const;
+const SUB_TABS = ["price", "drivers", "correlation"] as const;
 type SubTab = (typeof SUB_TABS)[number];
 
 const STR = {
   en: {
     price: "Price & Chart",
     drivers: "Drivers",
-    why: "Why is it moving?",
-    events: "Event Impact",
-    technical: "Technical",
+    technical: "Technical Levels & Signals",
     correlation: "Correlation",
     dominantFactor: "What's driving today",
     mixed: "No single factor clearly dominates -- spread across several.",
     shareOfScore: (pct: number) => `${pct.toFixed(0)}% of today's weighted score`,
-    whatChanged: "What changed vs. ~24h ago",
+    whatChanged: "Why is it moving? (what changed vs. ~24h ago)",
     notEnoughAttribution: "Not enough history under the current model version to compare yet.",
-    released: "Recently Released",
-    noReleased: "No HIGH-impact events released yet.",
-    upcoming: "Upcoming",
-    noUpcoming: "No upcoming HIGH-impact events with a forecast right now.",
     pivotBasis: (date: string) => `Based on ${date}'s close`,
     swingRange: (days: number) => `${days}-day range`,
     trend: "Trend (SMA)",
     momentum: "Momentum (RSI)",
+    signalsLabel: "Signals",
     corrNote: "Pearson correlation of daily % change vs. AUD/THB's own daily % change, over whatever real overlapping history exists.",
     notEnoughCorr: (min: number) => `Needs ${min}+ overlapping days of real history`,
     strong: "Strong",
@@ -68,27 +63,56 @@ const STR = {
     macdBearish: (macd: number, sig: number, hist: number) =>
       `MACD signal is currently NEGATIVE (bearish) -- the MACD line (${macd.toFixed(4)}) is below the Signal line (${sig.toFixed(4)}), histogram ${hist.toFixed(4)}.`,
     macdNotEnough: "Not enough real RBA F11.1 history yet to compute MACD.",
+    tip: {
+      priceChart:
+        "AUD/THB daily closing prices with pivot support/resistance levels overlaid, built from this app's own real stored price history. It matters because it shows at a glance where the current rate sits relative to its recent range and the nearest support/resistance. Classic pivots were chosen over a proprietary or ML-based indicator because the formula is fully transparent -- anyone can recompute it by hand from a single day's high/low/close.",
+      technicalLevels:
+        "Classic floor-trader pivot points: Pivot = (High+Low+Close)/3 of the most recently completed day, then R1/R2/R3 and S1/S2/S3 fan out from it with fixed multiples. Traders use these as reference levels where price is more likely to pause or reverse. Chosen over a proprietary or ML-based level because it's simple, deterministic, and has been used by real floor traders for decades -- nothing here is fitted or fabricated.",
+      technicalSignals:
+        "Simple Moving Average and RSI computed from this app's own real daily price history -- both periods shrink automatically while less than a full window of history exists yet, so the numbers are always real, never padded. SMA shows short-term trend direction; RSI (0-100) shows momentum, with >70 read as overbought and <30 as oversold. Chosen because they're the two most widely taught technical indicators, simple enough to sanity-check by hand.",
+      priceMaRsiTitle:
+        "RSI(14), MA50 and MA200 computed over the real RBA F11.1 daily AUD/THB series (2023 onward) -- a longer, independent real source than the live intraday feed used above. MA50/MA200 crossing is the classic 'Golden Cross' / 'Death Cross' long-term trend signal. This source was chosen because RBA's official daily reference rate is the only real series with enough history (900+ days) to compute a meaningful 50/200-day average.",
+      macdTitle:
+        "MACD = 12-day EMA minus 26-day EMA of the RBA daily series; the Signal line is a 9-day EMA of MACD itself. MACD above Signal (positive histogram) reads bullish, below reads bearish. Chosen because it's one of the most standard trend-momentum indicators, combining both in one number, and is fully reproducible from the same real daily closes used elsewhere on this page.",
+      dominantFactor:
+        "The FX Score is a weighted sum of 7 real signals; this shows which one currently contributes the largest share, and each factor's raw point contribution to today's total. Contributions are computed the exact same way the total score itself is built, so they always sum to it -- there's no separate 'explanation model' that could disagree with the real score.",
+      whatChanged:
+        "A rule-based, factor-by-factor comparison of the current FX Score snapshot against the snapshot from roughly 24 hours ago -- it states in plain language which real inputs moved and by how much, never a generated guess. Chosen over a free-text AI summary so every sentence here traces back to an actual stored number you could re-query yourself.",
+      correlation:
+        "Real Pearson correlation between AUD/THB's own daily % change and each other real market's daily % change, computed from this app's stored daily price bars (not the model's own factor weights). It matters because it's an independent, data-driven check of which markets actually move together with AUD/THB in practice -- separate from what the FX Score assumes. Requires 15+ real overlapping trading days per pair before showing a number, so it never reports a correlation computed on too few points to mean anything.",
+    },
+    factorTip: {
+      priceMomentum:
+        "35% weight -- the largest factor. 1H/4H momentum from this project's own live AUD/THB feed. Weighted highest because it's the most direct, real-time signal of AUD/THB's own movement.",
+      crossCurrency:
+        "20% weight. AUD/USD x USD/THB (matched-time), a cross-check against the Direct feed above -- if the two diverge, that gap is itself informative.",
+      relativeMarket:
+        "15% weight. AU-US 2Y yield spread, USD/CNH and USD/SGD -- proxies for regional risk appetite and rate differentials that tend to move AUD.",
+      commodity:
+        "8% weight. Iron Ore and Brent -- Australia's terms-of-trade link, since AUD often tracks commodity export prices.",
+      meanReversion:
+        "5% weight. Today's range position -- a price that has moved far within the day tends to snap back a little, a well-documented short-term statistical tendency.",
+      macro:
+        "10% weight. RBA/Fed policy, inflation, labour and growth releases -- the macro backdrop that eventually dominates over short-term technical noise.",
+      risk:
+        "7% weight. VIXY (volatility) -- AUD is a 'risk currency', typically sold for safety when markets get volatile.",
+    },
   },
   th: {
     price: "ราคา & กราฟ",
     drivers: "ปัจจัยขับเคลื่อน",
-    why: "ทำไมราคาถึงเคลื่อนไหว",
-    events: "ผลกระทบข่าว",
-    technical: "เทคนิค",
+    technical: "แนวรับ-แนวต้าน & สัญญาณเทคนิค",
     correlation: "ความสัมพันธ์",
     dominantFactor: "อะไรขับเคลื่อนคะแนนวันนี้",
     mixed: "ไม่มีปัจจัยใดปัจจัยหนึ่งเด่นชัด -- กระจายอยู่หลายปัจจัย",
     shareOfScore: (pct: number) => `${pct.toFixed(0)}% ของน้ำหนักคะแนนวันนี้`,
-    whatChanged: "อะไรเปลี่ยนไปจากเมื่อ ~24 ชม. ก่อน",
+    whatChanged: "ทำไมราคาถึงเคลื่อนไหว (อะไรเปลี่ยนไปจากเมื่อ ~24 ชม. ก่อน)",
     notEnoughAttribution: "โมเดลเวอร์ชันปัจจุบันยังมีประวัติไม่พอที่จะเปรียบเทียบ",
-    released: "ประกาศแล้วล่าสุด",
-    noReleased: "ยังไม่มีข่าวผลกระทบสูงประกาศจริง",
-    upcoming: "กำลังจะมาถึง",
-    noUpcoming: "ตอนนี้ไม่มีข่าวผลกระทบสูงที่มีตัวเลขคาดการณ์รอประกาศ",
     pivotBasis: (date: string) => `คำนวณจากราคาปิดวันที่ ${date}`,
     swingRange: (days: number) => `กรอบ ${days} วัน`,
     trend: "แนวโน้ม (SMA)",
     momentum: "Momentum (RSI)",
+    signalsLabel: "สัญญาณ",
     corrNote: "ค่าสหสัมพันธ์ Pearson ของ % การเปลี่ยนแปลงรายวัน เทียบกับ % การเปลี่ยนแปลงรายวันของ AUD/THB เอง จากข้อมูลจริงที่ซ้อนทับกันเท่าที่มี",
     notEnoughCorr: (min: number) => `ต้องมีข้อมูลจริงซ้อนทับกันอย่างน้อย ${min} วัน`,
     strong: "แรง",
@@ -108,6 +132,40 @@ const STR = {
     macdBearish: (macd: number, sig: number, hist: number) =>
       `สัญญาณ MACD ตอนนี้เป็นลบ (Bearish) -- เส้น MACD (${macd.toFixed(4)}) อยู่ใต้เส้น Signal (${sig.toFixed(4)}), Histogram ${hist.toFixed(4)}`,
     macdNotEnough: "ข้อมูล RBA F11.1 ย้อนหลังยังไม่พอสำหรับคำนวณ MACD",
+    tip: {
+      priceChart:
+        "กราฟราคาปิดรายวันของ AUD/THB พร้อมเส้นแนวรับ-แนวต้าน (pivot) ซ้อนทับ คำนวณจากข้อมูลราคาจริงที่แอปเก็บเอง มีประโยชน์เพราะเห็นได้ทันทีว่าราคาปัจจุบันอยู่ตรงไหนเทียบกับกรอบราคาล่าสุดและแนวรับ-แนวต้านที่ใกล้ที่สุด เลือกใช้ pivot แบบคลาสสิกแทนอินดิเคเตอร์เฉพาะทางหรือ ML เพราะสูตรโปร่งใส ใครก็คำนวณเองได้จากราคาสูงสุด-ต่ำสุด-ปิดของวันเดียว",
+      technicalLevels:
+        "Pivot Point แบบคลาสสิกที่นักเทรดใช้กัน: Pivot = (สูงสุด+ต่ำสุด+ปิด)/3 ของวันล่าสุดที่ปิดสมบูรณ์ แล้วคำนวณ R1/R2/R3 และ S1/S2/S3 ด้วยสูตรคูณคงที่จากจุดนั้น นักเทรดใช้ระดับเหล่านี้เป็นจุดอ้างอิงที่ราคามักจะชะลอหรือกลับตัว เลือกใช้สูตรนี้แทนโมเดล ML หรือสูตรเฉพาะทาง เพราะเรียบง่าย กำหนดผลลัพธ์ได้แน่นอน และนักเทรดพื้นจริงใช้กันมาหลายสิบปี ไม่มีการ fit หรือปั้นตัวเลข",
+      technicalSignals:
+        "Simple Moving Average และ RSI คำนวณจากข้อมูลราคารายวันจริงของแอปเอง โดยช่วงเวลาจะลดลงอัตโนมัติหากข้อมูลย้อนหลังยังไม่ครบ ตัวเลขจึงเป็นของจริงเสมอ ไม่มีการเติมข้อมูลปลอม SMA บอกทิศทางแนวโน้มระยะสั้น ส่วน RSI (0-100) บอกโมเมนตัม ถ้า >70 ถือว่า overbought และ <30 ถือว่า oversold เลือกใช้สองตัวนี้เพราะเป็นอินดิเคเตอร์พื้นฐานที่รู้จักกันมากที่สุด คำนวณตรวจสอบเองได้ง่าย",
+      priceMaRsiTitle:
+        "RSI(14), MA50 และ MA200 คำนวณจากอนุกรมราคาปิดรายวันจริงของ RBA F11.1 (ตั้งแต่ปี 2023) ซึ่งเป็นแหล่งข้อมูลจริงที่ยาวกว่าและเป็นอิสระจากฟีดเรียลไทม์ด้านบน การตัดกันของ MA50/MA200 คือสัญญาณ 'Golden Cross' / 'Death Cross' แบบคลาสสิกสำหรับแนวโน้มระยะยาว เลือกใช้แหล่งนี้เพราะอัตราอ้างอิงรายวันของ RBA เป็นแหล่งข้อมูลจริงแหล่งเดียวที่มีประวัติยาวพอ (900+ วัน) จะคำนวณค่าเฉลี่ย 50/200 วันได้อย่างมีความหมาย",
+      macdTitle:
+        "MACD = EMA 12 วัน ลบ EMA 26 วัน ของอนุกรมราคารายวัน RBA ส่วนเส้น Signal คือ EMA 9 วันของ MACD เอง ถ้า MACD อยู่เหนือ Signal (histogram เป็นบวก) อ่านว่าเป็นขาขึ้น ถ้าอยู่ใต้อ่านว่าเป็นขาลง เลือกใช้เพราะเป็นอินดิเคเตอร์แนวโน้ม-โมเมนตัมมาตรฐานที่สุดตัวหนึ่ง รวมทั้งสองอย่างไว้ในตัวเลขเดียว และคำนวณย้อนกลับได้จากราคาปิดรายวันจริงชุดเดียวกับที่ใช้ในหน้านี้",
+      dominantFactor:
+        "FX Score คือผลรวมถ่วงน้ำหนักของสัญญาณจริง 7 ตัว ส่วนนี้แสดงว่าปัจจัยไหนมีสัดส่วนมากที่สุดตอนนี้ พร้อมคะแนนที่แต่ละปัจจัยส่งผลต่อคะแนนรวมวันนี้ คำนวณด้วยวิธีเดียวกับที่ใช้สร้างคะแนนรวมจริง ผลรวมของแต่ละปัจจัยจึงเท่ากับคะแนนรวมเป๊ะ ไม่มี 'โมเดลอธิบาย' แยกต่างหากที่อาจขัดแย้งกับคะแนนจริง",
+      whatChanged:
+        "การเปรียบเทียบ FX Score ปัจจุบันกับสแนปช็อตเมื่อประมาณ 24 ชั่วโมงก่อน แบบทีละปัจจัยด้วยกฎตายตัว บอกเป็นภาษาที่อ่านง่ายว่าอินพุตจริงตัวไหนขยับไปเท่าไหร่ ไม่ใช่การเดาจาก AI สร้างข้อความ เลือกใช้วิธีนี้แทนสรุปแบบข้อความอิสระ เพื่อให้ทุกประโยคที่เห็นสืบย้อนกลับไปหาตัวเลขจริงที่เก็บไว้ในฐานข้อมูลได้",
+      correlation:
+        "ค่าสหสัมพันธ์ Pearson จริงระหว่าง % การเปลี่ยนแปลงรายวันของ AUD/THB เอง กับ % การเปลี่ยนแปลงรายวันของตลาดจริงอื่นๆ คำนวณจากแท่งราคารายวันที่แอปเก็บไว้เอง (ไม่ใช่น้ำหนักปัจจัยของโมเดล) มีประโยชน์เพราะเป็นการตรวจสอบอิสระจากข้อมูลจริงว่าตลาดไหนเคลื่อนไหวไปพร้อมกับ AUD/THB จริงๆ แยกต่างหากจากสมมติฐานของ FX Score ต้องมีข้อมูลจริงซ้อนทับกันอย่างน้อย 15 วันทำการต่อคู่ก่อนถึงจะแสดงตัวเลข เพื่อไม่ให้รายงานค่าสหสัมพันธ์ที่คำนวณจากข้อมูลน้อยเกินไปจนไม่มีความหมาย",
+    },
+    factorTip: {
+      priceMomentum:
+        "น้ำหนัก 35% -- ปัจจัยที่หนักที่สุด โมเมนตัม 1H/4H จากฟีด AUD/THB จริงของระบบนี้ ให้น้ำหนักสูงสุดเพราะเป็นสัญญาณตรงและเรียลไทม์ที่สุดของการเคลื่อนไหว AUD/THB เอง",
+      crossCurrency:
+        "น้ำหนัก 20% -- AUD/USD x USD/THB (จับคู่เวลา) ใช้ตรวจสอบไขว้กับฟีด Direct ด้านบน ถ้าสองค่านี้ต่างกันมาก ส่วนต่างนั้นก็เป็นข้อมูลที่มีนัยสำคัญเช่นกัน",
+      relativeMarket:
+        "น้ำหนัก 15% -- ส่วนต่างผลตอบแทนพันธบัตร AU-US 2 ปี, USD/CNH และ USD/SGD เป็นตัวแทนความเสี่ยงในภูมิภาคและส่วนต่างอัตราดอกเบี้ยที่มักขับเคลื่อน AUD",
+      commodity:
+        "น้ำหนัก 8% -- แร่เหล็กและเบรนท์ ความเชื่อมโยงเชิง terms-of-trade ของออสเตรเลีย เพราะ AUD มักเคลื่อนไหวตามราคาสินค้าโภคภัณฑ์ส่งออก",
+      meanReversion:
+        "น้ำหนัก 5% -- ตำแหน่งราคาในกรอบวันนี้ ราคาที่วิ่งไกลในวันมักดีดกลับมาบ้าง เป็นแนวโน้มทางสถิติระยะสั้นที่มีการศึกษาไว้ชัดเจน",
+      macro:
+        "น้ำหนัก 10% -- นโยบาย RBA/Fed, เงินเฟ้อ, การจ้างงาน และการเติบโต ปัจจัยมหภาคที่ในที่สุดจะครอบงำสัญญาณทางเทคนิคระยะสั้น",
+      risk:
+        "น้ำหนัก 7% -- VIXY (ความผันผวน) AUD เป็น 'risk currency' มักถูกขายเพื่อความปลอดภัยเมื่อตลาดผันผวน",
+    },
   },
 } as const;
 
@@ -130,16 +188,12 @@ export default function AnalysisTabs({
   locale,
   technicalOutlook,
   scoreExplained,
-  releasedEvents,
-  upcomingEvents,
   correlations,
   longTermTechnicals,
 }: {
   locale: Locale;
   technicalOutlook: TechnicalOutlook;
   scoreExplained: ScoreExplained;
-  releasedEvents: ReleasedEvent[];
-  upcomingEvents: ConsensusEvent[];
   correlations: { rows: CorrelationRow[]; minSamples: number };
   longTermTechnicals: LongTermTechnicals;
 }) {
@@ -164,203 +218,222 @@ export default function AnalysisTabs({
       </div>
 
       {tab === "price" && (
-        <Card title={t.price}>
-          {technicalOutlook.priceSeries.length > 0 ? (
-            <RangeChart
-              series={technicalOutlook.priceSeries.map((p) => ({ date: p.date, close: p.close }))}
-              locale={locale}
-              pivots={technicalOutlook.pivots}
-              currentRate={technicalOutlook.currentRate}
-              swingLow={technicalOutlook.swingLow}
-              swingHigh={technicalOutlook.swingHigh}
-              swingDays={technicalOutlook.swingLookbackDays}
-            />
-          ) : (
-            <p className="text-sm text-v2-muted">{technicalOutlook.error}</p>
+        <div className="space-y-6">
+          <Card
+            title={
+              <span className="flex items-center gap-1.5">
+                {t.price}
+                <InfoTooltip text={t.tip.priceChart} />
+              </span>
+            }
+          >
+            {technicalOutlook.priceSeries.length > 0 ? (
+              <RangeChart
+                series={technicalOutlook.priceSeries.map((p) => ({ date: p.date, close: p.close }))}
+                locale={locale}
+                pivots={technicalOutlook.pivots}
+                currentRate={technicalOutlook.currentRate}
+                swingLow={technicalOutlook.swingLow}
+                swingHigh={technicalOutlook.swingHigh}
+                swingDays={technicalOutlook.swingLookbackDays}
+              />
+            ) : (
+              <p className="text-sm text-v2-muted">{technicalOutlook.error}</p>
+            )}
+          </Card>
+
+          <Card
+            title={
+              <span className="flex items-center gap-1.5">
+                {t.technical}
+                <InfoTooltip text={t.tip.technicalLevels} />
+              </span>
+            }
+          >
+            {technicalOutlook.pivots ? (
+              <div className="grid sm:grid-cols-2 gap-6">
+                <div className="space-y-2 text-sm">
+                  {[
+                    { label: "R3", value: technicalOutlook.pivots.r3 },
+                    { label: "R2", value: technicalOutlook.pivots.r2 },
+                    { label: "R1", value: technicalOutlook.pivots.r1 },
+                    { label: "Pivot", value: technicalOutlook.pivots.pivot },
+                    { label: "S1", value: technicalOutlook.pivots.s1 },
+                    { label: "S2", value: technicalOutlook.pivots.s2 },
+                    { label: "S3", value: technicalOutlook.pivots.s3 },
+                  ].map((row) => (
+                    <div key={row.label} className="flex items-center justify-between">
+                      <span className="text-v2-muted">{row.label}</span>
+                      <span className="font-mono text-v2-foreground">{row.value.toFixed(4)}</span>
+                    </div>
+                  ))}
+                  <p className="text-xs text-v2-muted pt-2">{t.pivotBasis(technicalOutlook.pivots.basedOnDate)}</p>
+                  {technicalOutlook.swingHigh !== null && technicalOutlook.swingLow !== null && (
+                    <p className="text-xs text-v2-muted">
+                      {t.swingRange(technicalOutlook.swingLookbackDays)}: {technicalOutlook.swingLow.toFixed(4)} - {technicalOutlook.swingHigh.toFixed(4)}
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-v2-muted">
+                    {t.signalsLabel}
+                    <InfoTooltip text={t.tip.technicalSignals} />
+                  </div>
+                  {technicalOutlook.smaShortValue !== null && (
+                    <div>
+                      <p className="text-xs text-v2-muted">{t.trend} ({technicalOutlook.smaShortPeriod})</p>
+                      <p className="font-mono text-lg text-v2-foreground">{technicalOutlook.smaShortValue.toFixed(4)}</p>
+                    </div>
+                  )}
+                  {technicalOutlook.rsiValue !== null && (
+                    <div>
+                      <p className="text-xs text-v2-muted">{t.momentum} ({technicalOutlook.rsiPeriod})</p>
+                      <p className="font-mono text-lg text-v2-foreground">{technicalOutlook.rsiValue.toFixed(1)}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-v2-muted">{technicalOutlook.error}</p>
+            )}
+          </Card>
+
+          {longTermTechnicals.available && (
+            <Card
+              title={
+                <span className="flex items-center gap-1.5">
+                  {t.priceMaRsiTitle}
+                  <InfoTooltip text={t.tip.priceMaRsiTitle} />
+                </span>
+              }
+            >
+              <PriceMaRsiChart points={longTermTechnicals.priceStudy} locale={locale} />
+              <div className="mt-2 space-y-1 text-xs text-v2-muted leading-relaxed">
+                {longTermTechnicals.currentRsi14 !== null && (
+                  <p>
+                    {t.rsiNow(longTermTechnicals.currentRsi14)}
+                    {longTermTechnicals.currentRsi14 >= 70
+                      ? t.rsiOverboughtNote
+                      : longTermTechnicals.currentRsi14 <= 30
+                        ? t.rsiOversoldNote
+                        : t.rsiNeutralNote}
+                  </p>
+                )}
+                {longTermTechnicals.currentSma50 !== null && longTermTechnicals.currentSma200 !== null && (
+                  <p>
+                    {longTermTechnicals.maBias === "GOLDEN"
+                      ? t.maGolden(longTermTechnicals.currentSma50, longTermTechnicals.currentSma200)
+                      : t.maDeath(longTermTechnicals.currentSma50, longTermTechnicals.currentSma200)}
+                  </p>
+                )}
+                {longTermTechnicals.dataAsOfDate && <p>{t.asOf(longTermTechnicals.dataAsOfDate, longTermTechnicals.source)}</p>}
+              </div>
+            </Card>
           )}
-        </Card>
+
+          {longTermTechnicals.available && (
+            <Card
+              title={
+                <span className="flex items-center gap-1.5">
+                  {t.macdTitle}
+                  <InfoTooltip text={t.tip.macdTitle} />
+                </span>
+              }
+            >
+              {longTermTechnicals.macdStudy.length >= 2 &&
+              longTermTechnicals.currentMacd !== null &&
+              longTermTechnicals.currentSignal !== null &&
+              longTermTechnicals.currentHistogram !== null ? (
+                <>
+                  <MacdChart points={longTermTechnicals.macdStudy} locale={locale} />
+                  <p
+                    className={`mt-2 text-xs leading-relaxed font-medium ${
+                      longTermTechnicals.macdBias === "BULLISH"
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : longTermTechnicals.macdBias === "BEARISH"
+                          ? "text-red-600 dark:text-red-400"
+                          : "text-v2-muted"
+                    }`}
+                  >
+                    {longTermTechnicals.macdBias === "BULLISH"
+                      ? t.macdBullish(longTermTechnicals.currentMacd, longTermTechnicals.currentSignal, longTermTechnicals.currentHistogram)
+                      : t.macdBearish(longTermTechnicals.currentMacd, longTermTechnicals.currentSignal, longTermTechnicals.currentHistogram)}
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-v2-muted">{t.macdNotEnough}</p>
+              )}
+            </Card>
+          )}
+        </div>
       )}
 
       {tab === "drivers" && (
-        <Card title={t.dominantFactor}>
-          {scoreExplained.regime && scoreExplained.regime.key !== "MIXED" && scoreExplained.regime.dominantSharePct !== null ? (
-            <div>
-              <p className="text-xl font-semibold text-v2-foreground">{FACTOR_LABELS[scoreExplained.regime.key][locale]}</p>
-              <p className="text-sm text-v2-muted mt-1">{t.shareOfScore(scoreExplained.regime.dominantSharePct)}</p>
-            </div>
-          ) : (
-            <p className="text-sm text-v2-muted">{t.mixed}</p>
-          )}
-
-          <div className="mt-5 space-y-2">
-            {scoreExplained.attribution.factors.map((f) => (
-              <div key={f.key} className="flex items-center justify-between text-sm">
-                <span className="text-v2-muted">{FACTOR_LABELS[f.key][locale]}</span>
-                <span className="font-mono text-v2-foreground">
-                  {f.currentContribution !== null ? f.currentContribution.toFixed(1) : "--"}
-                </span>
+        <div className="space-y-6">
+          <Card
+            title={
+              <span className="flex items-center gap-1.5">
+                {t.dominantFactor}
+                <InfoTooltip text={t.tip.dominantFactor} />
+              </span>
+            }
+          >
+            {scoreExplained.regime && scoreExplained.regime.key !== "MIXED" && scoreExplained.regime.dominantSharePct !== null ? (
+              <div>
+                <p className="text-xl font-semibold text-v2-foreground">{FACTOR_LABELS[scoreExplained.regime.key][locale]}</p>
+                <p className="text-sm text-v2-muted mt-1">{t.shareOfScore(scoreExplained.regime.dominantSharePct)}</p>
               </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {tab === "why" && (
-        <Card title={t.whatChanged}>
-          {!scoreExplained.attribution.available ? (
-            <p className="text-sm text-v2-muted">{t.notEnoughAttribution}</p>
-          ) : (
-            <ul className="space-y-2 mb-5">
-              {technicalOutlook.narrative.map((line, i) => (
-                <li key={i} className="text-sm text-v2-muted leading-relaxed list-disc list-inside">
-                  {line}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      )}
-
-      {tab === "events" && (
-        <div className="grid md:grid-cols-2 gap-6">
-          <Card title={t.released}>
-            {releasedEvents.length === 0 ? (
-              <p className="text-sm text-v2-muted">{t.noReleased}</p>
             ) : (
-              <div className="space-y-3">
-                {releasedEvents.map((e, i) => (
-                  <div key={i} className="text-sm">
-                    <p className="text-v2-foreground font-medium">
-                      {e.currency} {e.eventName}
-                    </p>
-                    <p className="font-mono text-xs text-v2-muted">{e.actualValue}</p>
-                  </div>
-                ))}
-              </div>
+              <p className="text-sm text-v2-muted">{t.mixed}</p>
             )}
+
+            <div className="mt-5 space-y-2">
+              {scoreExplained.attribution.factors.map((f) => (
+                <div key={f.key} className="flex items-center justify-between text-sm">
+                  <span className="text-v2-muted flex items-center gap-1.5">
+                    {FACTOR_LABELS[f.key][locale]}
+                    <InfoTooltip text={t.factorTip[f.key]} />
+                  </span>
+                  <span className="font-mono text-v2-foreground">
+                    {f.currentContribution !== null ? f.currentContribution.toFixed(1) : "--"}
+                  </span>
+                </div>
+              ))}
+            </div>
           </Card>
-          <Card title={t.upcoming}>
-            {upcomingEvents.length === 0 ? (
-              <p className="text-sm text-v2-muted">{t.noUpcoming}</p>
+
+          <Card
+            title={
+              <span className="flex items-center gap-1.5">
+                {t.whatChanged}
+                <InfoTooltip text={t.tip.whatChanged} />
+              </span>
+            }
+          >
+            {!scoreExplained.attribution.available ? (
+              <p className="text-sm text-v2-muted">{t.notEnoughAttribution}</p>
             ) : (
-              <div className="space-y-3">
-                {upcomingEvents.map((e, i) => (
-                  <div key={i} className="text-sm">
-                    <p className="text-v2-foreground font-medium">
-                      {e.currency} {e.eventName}
-                    </p>
-                    <p className="font-mono text-xs text-v2-muted">
-                      {e.forecastValue ?? "--"} / {e.previousValue ?? "--"}
-                    </p>
-                  </div>
+              <ul className="space-y-2 mb-5">
+                {technicalOutlook.narrative.map((line, i) => (
+                  <li key={i} className="text-sm text-v2-muted leading-relaxed list-disc list-inside">
+                    {line}
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </Card>
         </div>
       )}
 
-      {tab === "technical" && (
-        <Card title={t.technical}>
-          {technicalOutlook.pivots ? (
-            <div className="grid sm:grid-cols-2 gap-6">
-              <div className="space-y-2 text-sm">
-                {[
-                  { label: "R2", value: technicalOutlook.pivots.r2 },
-                  { label: "R1", value: technicalOutlook.pivots.r1 },
-                  { label: "Pivot", value: technicalOutlook.pivots.pivot },
-                  { label: "S1", value: technicalOutlook.pivots.s1 },
-                  { label: "S2", value: technicalOutlook.pivots.s2 },
-                ].map((row) => (
-                  <div key={row.label} className="flex items-center justify-between">
-                    <span className="text-v2-muted">{row.label}</span>
-                    <span className="font-mono text-v2-foreground">{row.value.toFixed(4)}</span>
-                  </div>
-                ))}
-                <p className="text-xs text-v2-muted pt-2">{t.pivotBasis(technicalOutlook.pivots.basedOnDate)}</p>
-                {technicalOutlook.swingHigh !== null && technicalOutlook.swingLow !== null && (
-                  <p className="text-xs text-v2-muted">
-                    {t.swingRange(technicalOutlook.swingLookbackDays)}: {technicalOutlook.swingLow.toFixed(4)} - {technicalOutlook.swingHigh.toFixed(4)}
-                  </p>
-                )}
-              </div>
-              <div className="space-y-3">
-                {technicalOutlook.smaShortValue !== null && (
-                  <div>
-                    <p className="text-xs text-v2-muted">{t.trend} ({technicalOutlook.smaShortPeriod})</p>
-                    <p className="font-mono text-lg text-v2-foreground">{technicalOutlook.smaShortValue.toFixed(4)}</p>
-                  </div>
-                )}
-                {technicalOutlook.rsiValue !== null && (
-                  <div>
-                    <p className="text-xs text-v2-muted">{t.momentum} ({technicalOutlook.rsiPeriod})</p>
-                    <p className="font-mono text-lg text-v2-foreground">{technicalOutlook.rsiValue.toFixed(1)}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-v2-muted">{technicalOutlook.error}</p>
-          )}
-        </Card>
-      )}
-
-      {tab === "technical" && longTermTechnicals.available && (
-        <Card title={t.priceMaRsiTitle} className="mt-6">
-          <PriceMaRsiChart points={longTermTechnicals.priceStudy} locale={locale} />
-          <div className="mt-2 space-y-1 text-xs text-v2-muted leading-relaxed">
-            {longTermTechnicals.currentRsi14 !== null && (
-              <p>
-                {t.rsiNow(longTermTechnicals.currentRsi14)}
-                {longTermTechnicals.currentRsi14 >= 70
-                  ? t.rsiOverboughtNote
-                  : longTermTechnicals.currentRsi14 <= 30
-                    ? t.rsiOversoldNote
-                    : t.rsiNeutralNote}
-              </p>
-            )}
-            {longTermTechnicals.currentSma50 !== null && longTermTechnicals.currentSma200 !== null && (
-              <p>
-                {longTermTechnicals.maBias === "GOLDEN"
-                  ? t.maGolden(longTermTechnicals.currentSma50, longTermTechnicals.currentSma200)
-                  : t.maDeath(longTermTechnicals.currentSma50, longTermTechnicals.currentSma200)}
-              </p>
-            )}
-            {longTermTechnicals.dataAsOfDate && <p>{t.asOf(longTermTechnicals.dataAsOfDate, longTermTechnicals.source)}</p>}
-          </div>
-        </Card>
-      )}
-
-      {tab === "technical" && longTermTechnicals.available && (
-        <Card title={t.macdTitle} className="mt-6">
-          {longTermTechnicals.macdStudy.length >= 2 &&
-          longTermTechnicals.currentMacd !== null &&
-          longTermTechnicals.currentSignal !== null &&
-          longTermTechnicals.currentHistogram !== null ? (
-            <>
-              <MacdChart points={longTermTechnicals.macdStudy} locale={locale} />
-              <p
-                className={`mt-2 text-xs leading-relaxed font-medium ${
-                  longTermTechnicals.macdBias === "BULLISH"
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : longTermTechnicals.macdBias === "BEARISH"
-                      ? "text-red-600 dark:text-red-400"
-                      : "text-v2-muted"
-                }`}
-              >
-                {longTermTechnicals.macdBias === "BULLISH"
-                  ? t.macdBullish(longTermTechnicals.currentMacd, longTermTechnicals.currentSignal, longTermTechnicals.currentHistogram)
-                  : t.macdBearish(longTermTechnicals.currentMacd, longTermTechnicals.currentSignal, longTermTechnicals.currentHistogram)}
-              </p>
-            </>
-          ) : (
-            <p className="text-xs text-v2-muted">{t.macdNotEnough}</p>
-          )}
-        </Card>
-      )}
-
       {tab === "correlation" && (
-        <Card title={t.correlation}>
+        <Card
+          title={
+            <span className="flex items-center gap-1.5">
+              {t.correlation}
+              <InfoTooltip text={t.tip.correlation} />
+            </span>
+          }
+        >
           <p className="text-xs text-v2-muted mb-4">{t.corrNote}</p>
           <div className="space-y-2">
             {correlations.rows.map((row) => (
