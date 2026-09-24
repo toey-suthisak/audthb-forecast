@@ -1667,3 +1667,56 @@ restored for all three horizons (1H 44.2%/165, 4H 40.7%/162, DAILY
 only the range changed), DAILY's interval coverage now honestly 52%
 (down from 83%, in line with 1H/4H). Checked 375px mobile: no overflow.
 `npx tsc --noEmit` and `npx next build` both pass clean.
+
+## FORECAST_VERSION 1.3.0: 4H range corrected too, plus real per-horizon support/resistance (2026-09-24, same day)
+
+Same-day follow-up: user asked to (1) redo the Predicted Range
+calculation using each horizon's *own* data separately (1H/4H/DAILY,
+not shared constants) and (2) give each horizon its own real
+support/resistance levels instead of every horizon pointing at the one
+daily pivot.
+
+**Range check**: re-verified all three horizons' real mean
+|actual_move_pct| directly from resolved `forecast_outcomes` (same
+query method as the DAILY fix above). 1H (0.0408%) and DAILY (already
+fixed) matched their configs; **4H's real mean was 0.0828%, not its
+configured 0.07%** -- a leftover from 1H/4H's original 2026-09-20
+calibration, which used a thinner ~9-day live-feed proxy rather than
+`forecast_outcomes.actual_move_pct` directly (close, but not identical
+to the real thing). Corrected `HORIZON_CONFIG.4H.referenceRangePct`
+0.07 -> 0.08. `FORECAST_VERSION` bumped 1.2.0 -> 1.3.0 (same standard as
+every prior range-width change) and immediately backfilled the same way
+as before -- 165/162/142 resolved for 1H/4H/DAILY, all fully matched.
+
+**New: per-horizon support/resistance**. Previously every horizon's
+Forecast card implicitly referenced the single DAILY pivot (computed
+once per day from the previous day's H/L/C) -- there was no 1H-scale or
+4H-scale resistance/support at all. `lib/technical-outlook-data.ts`
+gained `getIntradayPivots()`: buckets raw `market_prices` ticks
+(10-min resolution, ~180 rows over a 30-hour window -- nowhere near
+Supabase's 1000-row cap, so no new SQL function needed the way the
+60-day daily bars did) into 1-hour and 4-hour OHLC bars in UTC (the
+standard FX 4H-candle convention), then reuses the exact same
+`classicPivots()` formula already used for the daily pivot against each
+timeframe's most recently *completed* bar. `ForecastEntry` gained a
+`pivots` field carrying each horizon's own real basis: 1H from the last
+completed 1H bar, 4H from the last completed 4H bar, DAILY from the
+existing daily pivot (unchanged, just piped through the same field for
+consistency). `classicPivots()` itself now rounds its own output
+(previously done ad hoc in the return statement), removing a small
+duplication.
+
+Wired into `app/(dashboard)/page.tsx`: each Forecast card now shows a
+"ต้าน X / รับ Y" (R1/S1) line using that horizon's own pivot, with an
+updated tooltip explaining the three are genuinely different bases, not
+one pivot reused three times.
+
+Verified live: 1H shows ต้าน 23.5242/รับ 23.5013 (tight, ~0.023 spread),
+4H shows ต้าน 23.5312/รับ 23.4872 (~0.044 spread), DAILY shows ต้าน
+23.5760/รับ 23.4885 (~0.0875 spread, and exactly matches the existing
+Technical Levels card's R1/S1 -- confirms it's reusing the real daily
+pivot, not a second calculation that could drift). Spread widens
+1H < 4H < DAILY as expected. 4H's interval coverage improved to 60%
+(was 53%), now in line with 1H (61%) and DAILY (52%). Checked 375px
+mobile: no overflow. `npx tsc --noEmit` and `npx next build` both pass
+clean.

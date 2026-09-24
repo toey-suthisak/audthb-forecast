@@ -40,7 +40,20 @@ import "server-only";
 // untouched. Backfilled immediately from the same 166 real historical
 // fx_score_snapshots rows used for 1.1.0 (same pattern as every prior
 // version bump): 165/162/142 resolved for 1H/4H/DAILY.
-export const FORECAST_VERSION = "1.2.0";
+//
+// Bumped again to 1.3.0 on 2026-09-24 (same day) when 4H's
+// referenceRangePct was corrected the same way: re-checked all three
+// horizons' own real mean |actual_move_pct| directly (1H n=165 mean
+// 0.0408%, 4H n=162 mean 0.0828%, DAILY n=141 mean 0.2219%) and found
+// 4H's constant (0.07%) sat noticeably below its own real mean (0.0828%)
+// -- an artifact of 1H/4H's original 2026-09-20 calibration, which used
+// a thinner ~9-day live-feed proxy rather than forecast_outcomes'
+// actual_move_pct directly (the two are close but not identical; 1H's
+// proxy happened to round to the same 0.04, 4H's didn't). Corrected to
+// 0.08%, matching 4H's own real resolved-outcome mean like DAILY's 1.2.0
+// fix did. 1H unchanged (0.04% already matches). Backfilled immediately,
+// same pattern, same 166 historical fx_score_snapshots rows.
+export const FORECAST_VERSION = "1.3.0";
 
 export type ForecastHorizon = "1H" | "4H" | "DAILY";
 
@@ -55,16 +68,14 @@ type HorizonConfig = {
   //
   // All three horizons now use the same method: mean |actual_move_pct|
   // over this project's own real resolved forecast_outcomes at this
-  // horizon (forecast_version 1.1.0, checked 2026-09-24 -- 1H n=165
-  // mean 0.0408%, 4H n=162 mean 0.0828%, DAILY n=141 mean 0.2219%,
-  // rounded to 0.04/0.07/0.22 respectively, roughly matching each
-  // horizon's own real 1H/4H/DAILY interval-coverage rate). DAILY was
-  // previously 0.39%, calibrated instead from the 927-day RBA
-  // backtest_daily_rates series (a coarser daily-close proxy, used
-  // because DAILY had no real resolved outcomes of its own yet at the
-  // time) -- switched once DAILY had enough real data to calibrate
-  // against directly, same as 1H/4H always have. See FORECAST_VERSION
-  // 1.2.0 comment above for the full real numbers and why.
+  // horizon (checked 2026-09-24 -- 1H n=165 mean 0.0408%, 4H n=162
+  // mean 0.0828%, DAILY n=141 mean 0.2219%, rounded to 0.04/0.08/0.22
+  // respectively). DAILY was previously 0.39% (from the 927-day RBA
+  // backtest_daily_rates proxy) and 4H was previously 0.07% (from a
+  // thinner ~9-day live-feed proxy) -- both switched to this project's
+  // own real resolved-outcome mean once enough data existed to
+  // calibrate against it directly. See the FORECAST_VERSION 1.2.0/1.3.0
+  // comments above for the full real numbers and why.
   referenceRangePct: number;
   // Real, shrinkage-calibrated slope (%/score-point) and intercept (%)
   // for the point estimate -- see the long comment above buildForecast
@@ -75,7 +86,7 @@ type HorizonConfig = {
 
 export const HORIZON_CONFIG: Record<ForecastHorizon, HorizonConfig> = {
   "1H": { hours: 1, referenceRangePct: 0.04, calibratedSlope: 0.000415, calibratedIntercept: -0.000037 },
-  "4H": { hours: 4, referenceRangePct: 0.07, calibratedSlope: 0.000694, calibratedIntercept: -0.000068 },
+  "4H": { hours: 4, referenceRangePct: 0.08, calibratedSlope: 0.000694, calibratedIntercept: -0.000068 },
   DAILY: { hours: 24, referenceRangePct: 0.22, calibratedSlope: 0.0037, calibratedIntercept: -0.002599 },
 };
 

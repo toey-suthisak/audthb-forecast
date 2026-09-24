@@ -93,6 +93,8 @@ const STR = {
     directionalAccuracy: (pct: number, n: number) => `${pct.toFixed(1)}% directional accuracy from ${n} runs`,
     vsBaseline: (pct: number) => `(vs. baseline ${pct.toFixed(1)}%)`,
     notEnoughTrack: "Not enough resolved forecasts yet to score accuracy.",
+    resistanceSupport: (r1: number, s1: number) => `R ${r1.toFixed(4)} / S ${s1.toFixed(4)}`,
+    resistanceSupportNone: "Not enough real intraday history yet for this horizon's own pivot.",
     scoreBreakdown: "Score Breakdown",
     seeAll: "See full breakdown",
     upcoming: "Today's Events",
@@ -109,7 +111,7 @@ const STR = {
       technicalLevels: "Classic floor-trader pivot points (Pivot, R1-R2, S1-S2) computed from the most recently completed day's high/low/close.",
       technicalSignals: "Simple moving averages and RSI computed from this app's own real daily price history -- periods shrink automatically while less history exists.",
       longTermLabel: "RSI(14), MA50/MA200 and MACD computed over the real RBA F11.1 daily AUD/THB series (2023 onward) -- a different, longer real source than the live intraday feed used elsewhere on this page. Full charts on the Analysis tab.",
-      forecast: "This app's own price forecast per horizon, using a slope/intercept fit against real resolved forecasts and shrunk toward the original naive assumption since the real correlation is still weak -- shown with its real directional-accuracy track record vs. a naive baseline.",
+      forecast: "This app's own price forecast per horizon, using a slope/intercept fit against real resolved forecasts and shrunk toward the original naive assumption since the real correlation is still weak -- shown with its real directional-accuracy track record vs. a naive baseline. R/S below each card is that horizon's own real pivot (1H from the last completed 1H bar, 4H from the last completed 4H bar, DAILY from the last completed day) -- not the same single daily pivot for all three.",
       scoreBreakdown: "How each of the 7 weighted factors contributed to the Core FX Score above -- contributions sum to the total score exactly.",
       upcoming: "MEDIUM/HIGH-impact AUD/USD/THB economic events scheduled for today, with their forecast and previous values.",
       relatedMarkets: "Real prices and % change for the pairs, commodities and yields this app's Core FX Score is built from.",
@@ -173,6 +175,8 @@ const STR = {
     directionalAccuracy: (pct: number, n: number) => `ความแม่นยำทิศทาง ${pct.toFixed(1)}% จาก ${n} ครั้ง`,
     vsBaseline: (pct: number) => `(เทียบกับ baseline ${pct.toFixed(1)}%)`,
     notEnoughTrack: "ข้อมูลผลลัพธ์ยังไม่พอสำหรับวัดความแม่นยำ",
+    resistanceSupport: (r1: number, s1: number) => `ต้าน ${r1.toFixed(4)} / รับ ${s1.toFixed(4)}`,
+    resistanceSupportNone: "ข้อมูลราคาย้อนหลังยังไม่พอสำหรับคำนวณ pivot ของกรอบเวลานี้",
     scoreBreakdown: "ปัจจัยขับเคลื่อน (Score Breakdown)",
     seeAll: "ดูรายละเอียดทั้งหมด",
     upcoming: "ข่าว / เหตุการณ์วันนี้",
@@ -189,7 +193,7 @@ const STR = {
       technicalLevels: "จุด pivot แบบคลาสสิก (Pivot, R1-R2, S1-S2) คำนวณจากราคาสูงสุด/ต่ำสุด/ปิดของวันล่าสุดที่สมบูรณ์แล้ว",
       technicalSignals: "เส้นค่าเฉลี่ยเคลื่อนที่และ RSI คำนวณจากข้อมูลราคารายวันจริงของระบบนี้ -- ช่วงเวลาจะปรับลดอัตโนมัติขณะที่ข้อมูลย้อนหลังยังมีไม่มาก",
       longTermLabel: "RSI(14), MA50/MA200 และ MACD คำนวณจากราคา AUD/THB รายวันจริงของ RBA F11.1 (ตั้งแต่ปี 2023) -- คนละแหล่งข้อมูลกับฟีดเรียลไทม์ที่ใช้ในส่วนอื่นของหน้านี้ ดูกราฟเต็มได้ที่แท็บวิเคราะห์",
-      forecast: "คาดการณ์ราคาตามกฎของระบบนี้เอง ปรับเทียบ (calibrate) สัมประสิทธิ์จากผลพยากรณ์จริงที่มีผลแล้ว แล้วดึงเข้าใกล้สมมติฐานเดิมเพราะความสัมพันธ์จริงยังอ่อน แสดงพร้อมสถิติความแม่นยำทิศทางจริงเทียบกับ baseline",
+      forecast: "คาดการณ์ราคาตามกฎของระบบนี้เอง ปรับเทียบ (calibrate) สัมประสิทธิ์จากผลพยากรณ์จริงที่มีผลแล้ว แล้วดึงเข้าใกล้สมมติฐานเดิมเพราะความสัมพันธ์จริงยังอ่อน แสดงพร้อมสถิติความแม่นยำทิศทางจริงเทียบกับ baseline แนวต้าน/แนวรับ (ต้าน/รับ) ใต้แต่ละการ์ดคือ pivot จริงของกรอบเวลานั้นเอง (1H จากแท่ง 1H ล่าสุดที่ปิดสมบูรณ์, 4H จากแท่ง 4H ล่าสุดที่ปิดสมบูรณ์, DAILY จากวันล่าสุดที่ปิดสมบูรณ์) -- ไม่ใช่ pivot รายวันตัวเดียวที่ใช้ซ้ำทั้งสามกรอบเวลา",
       scoreBreakdown: "แต่ละ 7 ปัจจัยถ่วงน้ำหนักส่งผลต่อ Core FX Score ด้านบนอย่างไร -- ผลรวมของ contribution เท่ากับคะแนนรวมพอดี",
       upcoming: "ข่าวเศรษฐกิจผลกระทบปานกลาง/สูงของ AUD/USD/THB ที่มีกำหนดวันนี้ พร้อมค่าคาดการณ์และค่าครั้งก่อน",
       relatedMarkets: "ราคาจริงและ % เปลี่ยนแปลงของคู่เงิน สินค้าโภคภัณฑ์ และผลตอบแทนพันธบัตรที่ Core FX Score ของระบบนี้ใช้คำนวณ",
@@ -708,6 +712,10 @@ export default async function DashboardPage() {
                     <p className="text-xs text-v2-muted">{t.notEnoughTrack}</p>
                   )}
                 </div>
+
+                <p className="text-[11px] font-mono text-v2-muted mt-2">
+                  {f.pivots ? t.resistanceSupport(f.pivots.r1, f.pivots.s1) : t.resistanceSupportNone}
+                </p>
               </div>
             ))}
           </div>
