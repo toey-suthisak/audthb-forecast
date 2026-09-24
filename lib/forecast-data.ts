@@ -51,12 +51,20 @@ export type Forecast = {
   methodology: string;
 };
 
-// Reuses the exact Core FX Score bias thresholds already in
-// lib/dashboard-data.ts (coreBias) rather than inventing new ones.
+// Always commits to a side (per user feedback 2026-09-24: "ฟันธง
+// ขึ้น/ลงเสมอ ไม่มีเป็นกลาง") instead of the earlier +/-15 dead zone that
+// read NEUTRAL. "NEUTRAL" stays a valid ForecastDirection value -- it's
+// still what components/TechnicalOutlook.tsx's legacy /classic page and
+// past resolved forecast_runs rows can show -- this function just never
+// produces it going forward. Real cost of always committing, stated
+// honestly rather than hidden: lib/evaluation-data.ts's direction_correct
+// only counts a hit when the actual move also lands outside its own
+// neutral band, so a forecast that always picks a side can no longer earn
+// credit for correctly calling a genuinely flat day -- Track Record's
+// directional-accuracy % may read lower on quiet days than the old
+// dead-zone version did, and that's the honest tradeoff of not hedging.
 function directionFromScore(coreFxScore: number): ForecastDirection {
-  if (coreFxScore >= 15) return "BULLISH";
-  if (coreFxScore <= -15) return "BEARISH";
-  return "NEUTRAL";
+  return coreFxScore >= 0 ? "BULLISH" : "BEARISH";
 }
 
 // UNCALIBRATED linear placeholder: predicted move scales with score
@@ -84,8 +92,8 @@ export function buildForecast(
     methodology:
       `UNCALIBRATED linear formula (${horizon}): predictedMovePct = (coreFxScore/100) * ${referenceRangePct}% ` +
       `(move-size scale calibrated against ${horizon === "DAILY" ? "the 927-day RBA backtest's mean absolute daily move, 0.394%" : "this project's own live intraday feed"} -- ` +
-      `see backtest_daily_rates / market_prices). Direction uses the existing Core FX Score bias thresholds (>=15 BULLISH, ` +
-      `<=-15 BEARISH). The scale is real; whether Core FX Score itself predicts direction or magnitude at this horizon is ` +
+      `see backtest_daily_rates / market_prices). Direction always commits to a side (Core FX Score >=0 BULLISH, ` +
+      `<0 BEARISH -- no NEUTRAL dead zone). The scale is real; whether Core FX Score itself predicts direction or magnitude at this horizon is ` +
       `not yet tested -- do not treat this as a real probability or confidence estimate. ` +
       (referenceRate !== null
         ? `Reference rate ${referenceRate} at run time.`

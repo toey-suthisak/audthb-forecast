@@ -1287,3 +1287,64 @@ today's real AUD/USD/THB-relevant events, clicking Fri 25 correctly
 swaps the table to Friday's real events. Checked 375px mobile: pill bar
 scrolls horizontally, no page overflow. `npx tsc --noEmit` and
 `npx next build` both pass clean.
+
+## Forecast card: always commit to a direction, no more NEUTRAL dead zone (2026-09-24)
+
+User feedback: "หน้า Forecast อยากได้แบบไหน?" -> picked "ให้ฟันธงขึ้น/ลงเสมอ ไม่มีเป็นกลาง"
+(always commit up/down, no neutral) AND "อยากได้ความแม่นยำที่ดีขึ้นจริงๆ ไม่ใช่แค่ UI"
+(want real accuracy improvement, not just a UI change) -- the second half
+is still open, see below.
+
+`lib/forecast-data.ts`'s `directionFromScore()` used to read NEUTRAL for
+any Core FX Score inside -15..+15 (a dead zone). Changed to always
+commit: `>=0` -> BULLISH, `<0` -> BEARISH, no dead zone. `ForecastDirection`
+the *type* still includes "NEUTRAL" (kept for `/classic`'s legacy
+`components/TechnicalOutlook.tsx` and historical `forecast_runs` rows
+that already have it) -- only the classification function itself stopped
+producing it going forward.
+
+Real, stated-honestly cost of this: `lib/evaluation-data.ts`'s
+`direction_correct` only counts a hit when the *actual* move also lands
+outside its own per-horizon neutral band -- so a forecast that always
+picks a side can no longer earn credit for correctly calling a
+genuinely flat/quiet period the way a NEUTRAL prediction used to.
+Track Record's directional-accuracy % may read lower on quiet days than
+before -- that's the honest tradeoff of not hedging, not a bug.
+
+Verified live: all three Forecast cards (1H/4H/DAILY) now show a
+committed arrow + BULLISH/BEARISH label (today: all three read "ขาขึ้น"
+/ up), each still paired with its real directional-accuracy track
+record right underneath (25.6%/164, 21.1%/161, 32.6%/141 vs baseline --
+unchanged, still honestly near-coinflip). `npx tsc --noEmit` and
+`npx next build` both pass clean.
+
+**Still open** (user wants real accuracy improvement, not cosmetic):
+discussed connecting MT5 or another data source. Flagged to the user
+that MT5 would mainly add another live FX price feed -- this project
+already has one (TwelveData) -- so it's unlikely to move accuracy much
+on its own; the forecast engine's own About-tab-documented limitation
+("UNCALIBRATED linear formula -- not a statistically fitted model") is
+the more direct lever, using the real history already collected
+(927+-day RBA backtest, growing forecast_outcomes table). Awaiting the
+user's direction on which path to take before building anything here.
+
+## Events "Actual" data gap -- root cause found (2026-09-24)
+
+User showed a screenshot of forexfactory.com's own site with real
+Actual values filled in and asked why this project's Events page never
+shows any. Investigated by fetching the exact feed this project's cron
+uses (`https://nfs.faireconomy.media/ff_calendar_thisweek.xml`) directly
+and grepping it: **zero `<actual>` tags across all 80 events in the
+feed** -- confirmed this is a structural limitation of the free public
+XML export, not a bug in `app/api/economic-consensus/route.ts`'s
+parsing or the daily cron (which does run and does upsert correctly --
+`ff_weekly_calendar.fetched_at` is same-day fresh). ForexFactory's own
+website pulls Actual from a private/internal API, not this free feed.
+
+User's direction: find an *additional* real data source that does carry
+Actual values (once-daily fetch is fine, so rate limits on a free-tier
+API shouldn't be an issue) rather than scrape forexfactory.com's own
+site (JS-rendered, against their stated ToS, fragile). **Not yet
+implemented** -- next step is researching a legitimate free/low-cost
+economic-calendar API with real Actual/release values before wiring
+anything in.
