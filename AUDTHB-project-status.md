@@ -1413,3 +1413,43 @@ surprise flip), Track Record correctly shows "not enough resolved
 forecasts yet" everywhere post-bump, About tab's Limitations section
 now states the real R² numbers. `npx tsc --noEmit` and `npx next build`
 both pass clean.
+
+## Forecast v1.1.0 backfilled from real history, same pattern as the 1.0.1 backfill (2026-09-24)
+
+User, seeing Track Record show "Not enough resolved forecasts yet
+(0/20)" right after the 1.1.0 version bump: "ทำไมยังไม่มี เอาข้อมูลย้อนหลัง
+มาทำไม่ได้หรอ" (why is there still none -- can't we use historical data?).
+Correct call -- the version bump resets the *live* count, but this
+project already had a real precedent for exactly this (documented
+above: the 2026-09-20 backfill that seeded 1.0.1's DAILY track record
+from 49 already-resolved historical `fx_score_snapshots` rows instead
+of waiting ~20 days for a live cron to accumulate them). Same real data
+still exists and is even deeper now (166 real hourly snapshots,
+2026-09-17..24), so redid the identical backfill for 1.1.0.
+
+Ran directly against Supabase (no new app code -- this is a one-time
+data operation, same as the earlier backfill):
+1. For every real `fx_score_snapshots` row with a non-null score/rate,
+   computed `target_time = run_slot + horizon_hours` for each of
+   1H/4H/DAILY, kept only rows where that target_time had already
+   passed, and inserted `forecast_runs` rows for `forecast_version =
+   '1.1.0'` using the *exact same* calibrated slope/intercept/range
+   constants now live in `lib/forecast-data.ts`'s `HORIZON_CONFIG` --
+   466 new rows (`on conflict (run_slot, model_version,
+   forecast_version, horizon) do nothing`, the real live unique
+   constraint -- confirmed via `pg_get_constraintdef` that it already
+   includes `horizon`, even though the original 2026-09-17 migration
+   file in the repo only shows 3 columns; the live schema and the repo
+   migration have drifted, worth a follow-up to reconcile but out of
+   scope here).
+2. Matched every new pending `forecast_runs` row against real
+   `market_prices` (closest AUD/THB tick within 240 minutes, same
+   tolerance the live `app/api/forecast-outcome` cron uses) and
+   inserted `forecast_outcomes` rows -- 465 MATCHED, 1 MISSING (no
+   price found in tolerance).
+
+Real result, same day as the version bump: 1H n=160 (44.4% vs 20.0%
+baseline, beats it), 4H n=160 (40.6% vs 19.4% baseline, beats it),
+DAILY n=141 (28.4% vs 30.5% baseline, does *not* beat it) -- an honest
+number, shown as "ชนะ Baseline: ไม่ใช่" rather than hidden. Verified
+live on both Dashboard's Forecast card and the Performance tab.
