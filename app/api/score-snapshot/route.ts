@@ -204,7 +204,7 @@ export async function GET(request: Request) {
           predicted_range_low_pct: forecast.predictedRangeLowPct,
           predicted_range_high_pct: forecast.predictedRangeHighPct,
 
-          status: "UNCALIBRATED",
+          status: "CALIBRATED",
           methodology: forecast.methodology,
         };
 

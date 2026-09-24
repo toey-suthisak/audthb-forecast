@@ -37,10 +37,10 @@ const STR = {
       "Each of the 7 factors above contributes score * weight / available weight to the final Core FX Score -- Score Explained (Analysis tab) shows which factor's contribution is largest right now, labeled MIXED when no single factor clearly leads (under 35% of the total). This is a real decomposition of the same number shown everywhere else, not a separate model.",
     prefund: "Prefund / Postfund Logic",
     prefundBody:
-      "Action Bias reuses the exact same Core FX Score thresholds used everywhere else in this app: Core FX Score >= +15 reads as a Postfund lean, <= -15 as a Prefund lean, and anything between as no clear lean. This is informational only -- it describes the model's current signal, not a recommendation to act, and the underlying forecast is still UNCALIBRATED (see Performance tab for real accuracy numbers).",
+      "Action Bias reuses the exact same Core FX Score thresholds used everywhere else in this app: Core FX Score >= +15 reads as a Postfund lean, <= -15 as a Prefund lean, and anything between as no clear lean. This is informational only -- it describes the model's current signal, not a recommendation to act, and the underlying forecast's real correlation with Core FX Score is still weak (see Performance tab for real accuracy numbers).",
     limitations: "Limitations",
     limitationsBody: [
-      "The Forecast engine (1H/4H/DAILY) uses a fixed, uncalibrated linear formula -- not a statistically fitted model. Track Record (Performance tab) is the only honest measure of how well it actually performs, and it currently sometimes performs at or below a naive \"no change\" baseline.",
+      "The Forecast engine (1H/4H/DAILY) fits a slope/intercept against real resolved forecasts and shrinks it toward the original naive assumption by how weak that real correlation is (R² 0.4%-2.7% across horizons as of 2026-09-24) -- not a confidently fitted statistical model. Track Record (Performance tab) is the only honest measure of how well it actually performs, and it currently sometimes performs at or below a naive \"no change\" baseline.",
       "Gold is tracked but not yet included in Core FX Score.",
       "This project's own AUD/THB price history only goes back to 2026-09-11 -- technical indicators, correlation, and event-reaction analysis all get more reliable as more real history accumulates, not less.",
       "No live news-narrative source is wired into this app -- News Signals is an experimental, separate context feed, not part of Core FX Score.",
@@ -83,10 +83,10 @@ const STR = {
       "ปัจจัยทั้ง 7 ด้านบนแต่ละตัวมีส่วนสนับสนุนคะแนน = score * weight / น้ำหนักที่มีข้อมูล ต่อ Core FX Score สุดท้าย -- หน้า Score Explained (แท็บ Analysis) จะโชว์ว่าปัจจัยไหนมีสัดส่วนมากที่สุดตอนนี้ และจะขึ้น MIXED เมื่อไม่มีปัจจัยไหนเด่นชัด (ต่ำกว่า 35% ของทั้งหมด) นี่คือการแตกตัวเลขเดียวกับที่แสดงอยู่ทั่วหน้านี้ ไม่ใช่โมเดลแยกต่างหาก",
     prefund: "ตรรกะ Prefund / Postfund",
     prefundBody:
-      "Action Bias ใช้ threshold ของ Core FX Score ตัวเดียวกับที่ใช้ทั้งแอป: Core FX Score >= +15 อ่านว่าเอนไปทาง Postfund, <= -15 อ่านว่าเอนไปทาง Prefund นอกนั้นถือว่ายังไม่มีทิศทางชัดเจน เป็นข้อมูลประกอบการตัดสินใจเท่านั้น ไม่ใช่คำแนะนำให้ลงมือทำ และ forecast ที่อ้างอิงยังเป็น UNCALIBRATED อยู่ (ดูตัวเลขความแม่นยำจริงที่แท็บ Performance)",
+      "Action Bias ใช้ threshold ของ Core FX Score ตัวเดียวกับที่ใช้ทั้งแอป: Core FX Score >= +15 อ่านว่าเอนไปทาง Postfund, <= -15 อ่านว่าเอนไปทาง Prefund นอกนั้นถือว่ายังไม่มีทิศทางชัดเจน เป็นข้อมูลประกอบการตัดสินใจเท่านั้น ไม่ใช่คำแนะนำให้ลงมือทำ และความสัมพันธ์จริงระหว่าง forecast กับ Core FX Score ยังอ่อนอยู่ (ดูตัวเลขความแม่นยำจริงที่แท็บ Performance)",
     limitations: "ข้อจำกัด",
     limitationsBody: [
-      "Forecast engine (1H/4H/DAILY) ใช้สูตรเส้นตรงคงที่ที่ยังไม่ได้ปรับเทียบ ไม่ใช่โมเดลที่ผ่านการ fit ทางสถิติ Track Record (แท็บ Performance) คือตัวชี้วัดความแม่นยำจริงเพียงอย่างเดียวที่เชื่อถือได้ และตอนนี้บางช่วงเวลายังแม่นยำเท่ากับหรือแย่กว่าการเดา 'ไม่เปลี่ยนแปลง' ธรรมดา",
+      "Forecast engine (1H/4H/DAILY) ปรับเทียบ (calibrate) ค่า slope/intercept จากผลพยากรณ์จริงที่มีผลแล้ว แล้วดึงเข้าใกล้สมมติฐานเดิมตามความอ่อนของความสัมพันธ์จริง (R² 0.4%-2.7% ในแต่ละกรอบเวลา ณ 2026-09-24) ไม่ใช่โมเดลที่ fit ทางสถิติแบบมั่นใจเต็มที่ Track Record (แท็บ Performance) คือตัวชี้วัดความแม่นยำจริงเพียงอย่างเดียวที่เชื่อถือได้ และตอนนี้บางช่วงเวลายังแม่นยำเท่ากับหรือแย่กว่าการเดา 'ไม่เปลี่ยนแปลง' ธรรมดา",
       "ทองคำถูกเก็บข้อมูลไว้แล้วแต่ยังไม่ถูกนำไปคิดคะแนน Core FX Score",
       "ประวัติราคา AUD/THB ของระบบนี้เริ่มเก็บตั้งแต่ 2026-09-11 เท่านั้น -- ตัวชี้วัดทางเทคนิค ความสัมพันธ์เชิงสถิติ และการวิเคราะห์ผลกระทบข่าว จะแม่นยำขึ้นเรื่อยๆ เมื่อมีข้อมูลจริงสะสมมากขึ้น",
       "ไม่มีแหล่งข่าวสดเชื่อมต่อกับแอปนี้ -- สัญญาณข่าวเป็นฟีดทดลองแยกต่างหาก ไม่ได้อยู่ใน Core FX Score",

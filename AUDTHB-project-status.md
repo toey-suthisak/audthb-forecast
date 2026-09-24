@@ -1348,3 +1348,68 @@ site (JS-rendered, against their stated ToS, fragile). **Not yet
 implemented** -- next step is researching a legitimate free/low-cost
 economic-calendar API with real Actual/release values before wiring
 anything in.
+
+## Forecast engine: real regression-based calibration, shrunk toward the naive prior (2026-09-24)
+
+User: "backtest อัปเดตทุกกี่วัน ลอง calibrate forecast ใหม่หน่อย" (how
+often does the backtest update, try recalibrating the forecast).
+
+**Backtest cadence**: confirmed `app/api/backtest-update` runs weekdays
+only, 08:00 UTC (`update-backtest-daily` on cron-job.org, per this
+file's own earlier workflow-J note) -- no Saturday/Sunday runs since
+RBA itself doesn't publish F11.1 on weekends. Checked live:
+`backtest_daily_rates` correctly shows gaps every weekend (e.g. 09-18
+to 09-22 with the 09-19/09-20 weekend skipped) and was missing
+2026-09-23 at check time only because today's (09-24) 08:00 UTC /
+15:00 Bangkok run hadn't fired yet in wall-clock time -- not a bug.
+
+**Real calibration**: ran the actual regression Postgres can do in one
+query -- `actual_move_pct ~ intercept + slope*core_fx_score` over every
+MATCHED `forecast_outcomes` row joined to its `forecast_runs.core_fx_score`,
+grouped by horizon at the live forecast_version:
+- 1H (n=164): slope=+0.000971, intercept=-0.001356, r²=0.027, corr=+0.16
+- 4H (n=161): slope=-0.000755, intercept=-0.017118, r²=0.004, corr=-0.06
+- DAILY (n=141, v1.0.1): slope=-0.004302, intercept=-0.106499, r²=0.024, corr=-0.16
+
+Correlation is weak everywhere, and the *raw* fitted slope is actually
+negative at 4H and DAILY -- swapping those in unmodified would flip
+both horizons' direction from bullish to bearish under a realistic
+positive score, based on evidence this weak (sample size still modest,
+r² near zero). Rather than either (a) confidently ship a likely-noisy
+sign flip, or (b) keep pretending the original positive-slope
+assumption was ever tested, `lib/forecast-data.ts`'s `HORIZON_CONFIG`
+now stores each horizon's real slope/intercept **shrunk toward the
+original naive assumption by r²** (`calibrated = r²*real + (1-r²)*naive`,
+standard empirical-Bayes-style shrinkage for a weak-evidence regime).
+With r² this low, the shrunk coefficients land close to the naive ones
+-- no horizon flips sign under today's real score -- which is itself
+an honest finding: the evidence doesn't yet justify a bigger change.
+
+`directionFromMove()` replaced `directionFromScore()`: direction is now
+the calibrated point estimate's own sign, so `predictedDirection` and
+`predictedMovePct` can never contradict each other (previously direction
+came from an independent Core FX Score threshold). Still always commits
+(no NEUTRAL), per the immediately-prior change.
+
+**FORECAST_VERSION bumped 1.0.1 -> 1.1.0** (same established pattern as
+the 2026-09-20 bump): the point-estimate formula genuinely changed, so
+mixing pre/post-calibration resolved forecasts under one accuracy
+number would be incoherent -- Track Record correctly resets to "not
+enough resolved forecasts yet" for all three horizons and will earn a
+fresh, honest measurement window as new 1.1.0 forecasts resolve.
+
+Swept every "(still) UNCALIBRATED" string across the app (Dashboard's
+Forecast tooltip EN/TH, Today's Outlook's action-bias note EN/TH, About
+tab's Prefund/Postfund body and Limitations EN/TH, `/classic`'s legacy
+`TechnicalOutlook.tsx` tooltip EN/TH, and `forecast_runs.status`'s
+literal insert value) and replaced with accurate language describing
+the real shrinkage-calibration and its real, quantified weak-r²
+caveat -- including the exact real numbers on the About tab so the
+claim is independently checkable, not just asserted.
+
+Verified live: today's real score (~+21 to +28 through the session)
+kept all three Forecast cards BULLISH under the new formula (no
+surprise flip), Track Record correctly shows "not enough resolved
+forecasts yet" everywhere post-bump, About tab's Limitations section
+now states the real R² numbers. `npx tsc --noEmit` and `npx next build`
+both pass clean.

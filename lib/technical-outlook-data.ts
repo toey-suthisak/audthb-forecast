@@ -72,7 +72,7 @@ const STR = {
     prefund: "Prefund lean",
     neutralAction: "No clear lean",
     actionNote: (label: string) =>
-      `${label} -- informational only, derived directly from the Core FX Score's own bias thresholds. Not investment advice, and the underlying forecast is still UNCALIBRATED.`,
+      `${label} -- informational only, derived directly from the Core FX Score's own bias thresholds. Not investment advice, and the underlying forecast's real correlation with Core FX Score is still weak (see Performance tab for real accuracy numbers).`,
     currentPrice: "Current price",
     upcomingEvent: (event: string, currency: string, forecast: string, previous: string) =>
       `Upcoming: ${currency} ${event} -- forecast ${forecast}, previous ${previous}`,
@@ -148,7 +148,7 @@ const STR = {
     prefund: "เอนไปทาง Prefund",
     neutralAction: "ยังไม่มีทิศทางชัดเจน",
     actionNote: (label: string) =>
-      `${label} -- เป็นข้อมูลประกอบการตัดสินใจเท่านั้น มาจาก threshold คะแนน Core FX Score ตัวเดียวกับที่ใช้ทั้งหน้านี้ ไม่ใช่คำแนะนำการลงทุน และ forecast ที่อ้างอิงยังเป็น UNCALIBRATED อยู่`,
+      `${label} -- เป็นข้อมูลประกอบการตัดสินใจเท่านั้น มาจาก threshold คะแนน Core FX Score ตัวเดียวกับที่ใช้ทั้งหน้านี้ ไม่ใช่คำแนะนำการลงทุน และความสัมพันธ์จริงระหว่าง forecast กับ Core FX Score ยังอ่อนอยู่ (ดูตัวเลขความแม่นยำจริงที่แท็บ Performance)`,
     currentPrice: "ราคาปัจจุบัน",
     upcomingEvent: (event: string, currency: string, forecast: string, previous: string) =>
       `ข่าวที่จะประกาศเร็วๆ นี้: ${currency} ${event} -- คาดการณ์ ${forecast} จากเดิม ${previous}`,

@@ -23,7 +23,7 @@ const STR = {
     smaLegend: (n: number) => `SMA(${n})`,
     forecastHeading: "Forecast",
     forecastTooltip:
-      "Derived from today's Core FX Score using a fixed, uncalibrated formula per horizon -- it is not a statistically fitted prediction. Track Record below is the only honest measure of how well each one actually performs.",
+      "Derived from today's Core FX Score using a slope/intercept fit against real resolved forecasts per horizon, shrunk toward the original naive assumption since the real correlation is still weak. Track Record below is the only honest measure of how well each one actually performs.",
     forecastAllNeutral:
       "All three read NEUTRAL because Core FX Score is inside the -15 to +15 neutral band -- every horizon uses the same directional call, only the predicted move size differs.",
     forecastUnavailable: "Core FX Score is not available right now -- unable to calculate a forecast.",
@@ -49,7 +49,7 @@ const STR = {
     smaLegend: (n: number) => `SMA(${n})`,
     forecastHeading: "พยากรณ์",
     forecastTooltip:
-      "คำนวณจาก Core FX Score ของวันนี้ด้วยสูตรคงที่ที่ยังไม่ได้ปรับเทียบในแต่ละกรอบเวลา -- ไม่ใช่การพยากรณ์ที่ผ่านการทดสอบทางสถิติ Track Record ด้านล่างคือตัวชี้วัดความแม่นยำจริงเพียงอย่างเดียวที่เชื่อถือได้",
+      "คำนวณจาก Core FX Score ของวันนี้ด้วยค่า slope/intercept ที่ปรับเทียบจากผลพยากรณ์จริงที่มีผลแล้วในแต่ละกรอบเวลา แล้วดึงเข้าใกล้สมมติฐานเดิมเพราะความสัมพันธ์จริงยังอ่อน Track Record ด้านล่างคือตัวชี้วัดความแม่นยำจริงเพียงอย่างเดียวที่เชื่อถือได้",
     forecastAllNeutral:
       "ทั้งสามกรอบเวลาอ่านได้ NEUTRAL เพราะ Core FX Score อยู่ในช่วงเป็นกลาง -15 ถึง +15 -- ทุกกรอบเวลาใช้เกณฑ์ทิศทางเดียวกัน ต่างกันแค่ขนาดการเคลื่อนไหวที่คาดการณ์",
     forecastUnavailable: "ไม่มี Core FX Score ในขณะนี้ -- ไม่สามารถคำนวณพยากรณ์ได้",
