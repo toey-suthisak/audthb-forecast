@@ -1,12 +1,15 @@
 import Card from "@/components/v2/Card";
 import BadgeChip from "@/components/v2/BadgeChip";
 import DonutGauge from "@/components/v2/DonutGauge";
+import { IconAlertTriangle, IconBars, IconGauge, IconGlobe } from "@/components/v2/Icon";
 import { getLocale } from "@/lib/i18n-server";
 import { getDashboardData } from "@/lib/dashboard-data";
 import { getDataHealth, type DataRow } from "@/lib/data-health-data";
 import type { ChipTone } from "@/components/v2/BadgeChip";
 
 export const dynamic = "force-dynamic";
+
+const ICON_CLASS = "h-3.5 w-3.5";
 
 const STR = {
   en: {
@@ -77,15 +80,36 @@ export default async function DataPage() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
-        <Card title={t.colData} className="lg:col-span-2" padded={false}>
-          <div className="overflow-x-auto">
+        <Card title={t.colData} icon={<IconBars className={ICON_CLASS} />} className="lg:col-span-2" padded={false}>
+          {/* Below `sm` a 5-column table has no room to reflow into, so
+              rows used to just drop the Updated/Source columns silently.
+              A stacked card per row keeps every field visible instead --
+              the table (all columns, no hiding) takes over once there's
+              actually room for it at `sm` and up. */}
+          <div className="sm:hidden divide-y divide-v2-border">
+            {health.rows.map((row) => (
+              <div key={row.key} className="px-5 py-3 space-y-1.5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium text-v2-foreground">{row.label}</span>
+                  <BadgeChip label={row.status} tone={statusTone(row.status)} />
+                </div>
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <span className="font-mono text-v2-foreground">{row.value ?? "--"}</span>
+                  <span className="text-v2-muted">{formatUpdated(row, locale)}</span>
+                </div>
+                <p className="text-[11px] text-v2-muted">{row.source}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="hidden sm:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs text-v2-muted border-b border-v2-border">
                   <th className="px-5 py-2.5 font-medium">{t.colData}</th>
                   <th className="px-5 py-2.5 font-medium">{t.colValue}</th>
-                  <th className="px-5 py-2.5 font-medium hidden sm:table-cell">{t.colUpdated}</th>
-                  <th className="px-5 py-2.5 font-medium hidden md:table-cell">{t.colSource}</th>
+                  <th className="px-5 py-2.5 font-medium">{t.colUpdated}</th>
+                  <th className="px-5 py-2.5 font-medium">{t.colSource}</th>
                   <th className="px-5 py-2.5 font-medium">{t.colStatus}</th>
                 </tr>
               </thead>
@@ -94,8 +118,8 @@ export default async function DataPage() {
                   <tr key={row.key} className="border-b border-v2-border last:border-b-0">
                     <td className="px-5 py-2.5 text-v2-foreground font-medium">{row.label}</td>
                     <td className="px-5 py-2.5 font-mono text-v2-foreground">{row.value ?? "--"}</td>
-                    <td className="px-5 py-2.5 text-v2-muted hidden sm:table-cell">{formatUpdated(row, locale)}</td>
-                    <td className="px-5 py-2.5 text-v2-muted hidden md:table-cell">{row.source}</td>
+                    <td className="px-5 py-2.5 text-v2-muted">{formatUpdated(row, locale)}</td>
+                    <td className="px-5 py-2.5 text-v2-muted">{row.source}</td>
                     <td className="px-5 py-2.5">
                       <BadgeChip label={row.status} tone={statusTone(row.status)} />
                     </td>
@@ -107,14 +131,14 @@ export default async function DataPage() {
         </Card>
 
         <div className="space-y-6">
-          <Card title={t.dataHealth}>
+          <Card title={t.dataHealth} icon={<IconGauge className={ICON_CLASS} />}>
             <div className="flex items-center gap-4">
               <DonutGauge value={health.coveragePct} max={100} label={health.coveragePct.toFixed(1)} sublabel="/100" />
               <p className="text-xs text-v2-muted leading-relaxed">{t.dataHealthNote}</p>
             </div>
           </Card>
 
-          <Card title={t.dataAlerts}>
+          <Card title={t.dataAlerts} icon={<IconAlertTriangle className={ICON_CLASS} />} className="bg-amber-50/40 dark:bg-amber-500/5">
             <ul className="space-y-2">
               {health.alerts.map((alert, i) => (
                 <li key={i} className="flex items-start gap-2 text-xs text-v2-muted leading-relaxed">
@@ -125,7 +149,7 @@ export default async function DataPage() {
             </ul>
           </Card>
 
-          <Card title={t.sourceStatus}>
+          <Card title={t.sourceStatus} icon={<IconGlobe className={ICON_CLASS} />}>
             <div className="space-y-2">
               {health.sources.map((source) => (
                 <div key={source.name} className="flex items-center justify-between text-sm">

@@ -7,6 +7,7 @@ import InfoTooltip from "@/components/v2/InfoTooltip";
 import RangeChart from "@/components/v2/RangeChart";
 import PriceMaRsiChart from "@/components/v2/PriceMaRsiChart";
 import MacdChart from "@/components/v2/MacdChart";
+import { IconBars, IconCandles, IconCompass, IconGlobe, IconLayers, IconPulse } from "@/components/v2/Icon";
 import type { ChipTone } from "@/components/v2/BadgeChip";
 import type { TechnicalOutlook } from "@/lib/technical-outlook-data";
 import type { ScoreExplained } from "@/lib/score-explained-data";
@@ -16,6 +17,7 @@ import type { FactorContribution, FactorKey } from "@/lib/score-factors";
 import type { Locale } from "@/lib/i18n";
 
 const MAX_FACTOR_WEIGHT = 35;
+const ICON_CLASS = "h-3.5 w-3.5";
 
 function changeColorClass(value: number | null): string {
   if (value === null || value === 0) return "text-v2-muted";
@@ -274,6 +276,7 @@ export default function AnalysisTabs({
       {tab === "price" && (
         <div className="space-y-6">
           <Card
+            icon={<IconCandles className={ICON_CLASS} />}
             title={
               <span className="flex items-center gap-1.5">
                 {t.price}
@@ -304,6 +307,7 @@ export default function AnalysisTabs({
           </Card>
 
           <Card
+            icon={<IconLayers className={ICON_CLASS} />}
             title={
               <span className="flex items-center gap-1.5">
                 {t.technical}
@@ -395,6 +399,7 @@ export default function AnalysisTabs({
 
           {longTermTechnicals.available && (
             <Card
+              icon={<IconPulse className={ICON_CLASS} />}
               title={
                 <span className="flex items-center gap-1.5">
                   {t.priceMaRsiTitle}
@@ -428,6 +433,7 @@ export default function AnalysisTabs({
 
           {longTermTechnicals.available && (
             <Card
+              icon={<IconBars className={ICON_CLASS} />}
               title={
                 <span className="flex items-center gap-1.5">
                   {t.macdTitle}
@@ -466,6 +472,7 @@ export default function AnalysisTabs({
       {tab === "drivers" && (
         <div className="space-y-6">
           <Card
+            icon={<IconBars className={ICON_CLASS} />}
             title={
               <span className="flex items-center gap-1.5">
                 {t.scoreBreakdown}
@@ -505,6 +512,7 @@ export default function AnalysisTabs({
           </Card>
 
           <Card
+            icon={<IconCompass className={ICON_CLASS} />}
             title={
               <span className="flex items-center gap-1.5">
                 {t.whatChanged}
@@ -529,6 +537,7 @@ export default function AnalysisTabs({
 
       {tab === "correlation" && (
         <Card
+          icon={<IconGlobe className={ICON_CLASS} />}
           title={
             <span className="flex items-center gap-1.5">
               {t.correlation}

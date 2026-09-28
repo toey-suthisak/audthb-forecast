@@ -1916,3 +1916,58 @@ SVG `<text>` fill values, not just eyeballing), 1H (no regression, real
 gaps preserved), DAILY on mobile (375px, labels stack cleanly in the
 right gutter, colors and hierarchy render correctly). `npx tsc --noEmit`
 and `npx next build` both pass clean.
+
+## Site-wide design consistency pass -- all 6 pages (2026-09-28)
+
+User asked to improve the look and readability of "every page"
+(ลอง improve เว็บนี้ให้ดูดี เข้าใจง่ายขึ้น ในทุก ๆ หน้า). Rather than guessing,
+had an Explore agent survey the existing v2 design system (components/v2/
+Card, KpiCard, BadgeChip, InfoTooltip, Icon) and all 6 dashboard pages
+(Dashboard, Analysis, Events, Data, Performance, About) for concrete
+inconsistencies. All 6 pages already used the same v2 token system
+correctly (no legacy classes, no broken dark-mode) -- the real gap was
+that only the main Dashboard page used icons on its Card titles;
+Analysis, Events, Performance, Data, and About all rendered plain
+text-only card headers, which is exactly what made them read as
+noticeably less polished than the Dashboard.
+
+**`components/v2/Icon.tsx`**: added two icons (`IconAlertTriangle`,
+`IconShield`) to the existing hand-rolled set -- needed for
+Limitations/Data-Alerts and Not-Financial-Advice cards, which had no
+matching icon before.
+
+**Icons added to every Card title, reusing the Dashboard's own
+icon-per-concept mapping for consistency** (e.g. `IconCandles` for any
+price chart, `IconBars` for Score Breakdown, `IconGlobe` for
+cross-market correlation, `IconCalendar` for calendar/history tables)
+rather than picking new icons ad hoc:
+- `app/(dashboard)/about/page.tsx`: all 7 cards.
+- `app/(dashboard)/data/page.tsx`: all 4 cards; also tinted the Data
+  Alerts card amber (`bg-amber-50/40`) to match the warning-toned
+  content, the same treatment About's own warning card already used.
+- `app/(dashboard)/events/page.tsx`: both cards.
+- `app/(dashboard)/performance/page.tsx`: all 4 card groups.
+- `components/v2/AnalysisTabs.tsx`: all 7 cards across its 3 sub-tabs.
+
+**`app/(dashboard)/performance/page.tsx`**: the "Out-of-sample" label
+was using the native HTML `title` attribute for its explanation --
+exactly the unreliable-tooltip pattern `InfoTooltip`'s own code comment
+says was already replaced everywhere else on this site (~1s hover
+delay, does nothing on touch). Swapped it for the real `InfoTooltip`
+component like every other tooltip in the app.
+
+**`app/(dashboard)/data/page.tsx`**: the Data table hid the
+Updated/Source columns below the `sm`/`md` breakpoints, silently
+dropping information on mobile instead of reflowing it. Added a
+stacked-card layout (`sm:hidden`) that shows every field per row, with
+the existing table (now showing all columns, no hiding) taking over at
+`sm` and up once there's actually room for it.
+
+**`app/(dashboard)/page.tsx`**: the Dashboard was the only page using
+`space-y-8` for its top-level section spacing; the other 5 pages all
+use `space-y-6`. Changed Dashboard to match.
+
+Verified live on all 6 pages (About, Data desktop + mobile stacked
+view, Events, Performance including the new `InfoTooltip` DOM check,
+Analysis across all 3 sub-tabs, Dashboard spacing) -- `npx tsc --noEmit`
+and `npx next build` both pass clean.

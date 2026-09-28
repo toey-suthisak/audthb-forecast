@@ -1,12 +1,15 @@
 import Card from "@/components/v2/Card";
 import BadgeChip from "@/components/v2/BadgeChip";
 import EventDayBar from "@/components/v2/EventDayBar";
+import { IconCalendar, IconPulse } from "@/components/v2/Icon";
 import { getLocale } from "@/lib/i18n-server";
 import { getFfWeeklyCalendar } from "@/lib/ff-weekly-calendar-data";
 import { getRecentEconomicOutcomes } from "@/lib/economic-consensus-data";
 import type { ChipTone } from "@/components/v2/BadgeChip";
 
 export const dynamic = "force-dynamic";
+
+const ICON_CLASS = "h-3.5 w-3.5";
 
 const STR = {
   en: {
@@ -88,7 +91,7 @@ export default async function EventsPage() {
         <p className="text-sm text-v2-muted mt-1">{t.subtitle}</p>
       </div>
 
-      <Card title={t.reaction}>
+      <Card title={t.reaction} icon={<IconPulse className={ICON_CLASS} />}>
         <p className="text-xs text-v2-muted mb-4">{t.reactionNote}</p>
         {outcomes.events.length === 0 ? (
           <p className="text-sm text-v2-muted">{t.noReleases}</p>
@@ -113,7 +116,7 @@ export default async function EventsPage() {
         )}
       </Card>
 
-      <Card title={t.calendar} padded={false}>
+      <Card title={t.calendar} icon={<IconCalendar className={ICON_CLASS} />} padded={false}>
         {calendar.error ? (
           <p className="text-sm text-red-600 dark:text-red-400 p-5">{calendar.error}</p>
         ) : calendar.byDate.length === 0 ? (

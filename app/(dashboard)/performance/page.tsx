@@ -1,5 +1,7 @@
 import Card from "@/components/v2/Card";
 import BadgeChip from "@/components/v2/BadgeChip";
+import InfoTooltip from "@/components/v2/InfoTooltip";
+import { IconBars, IconCalendar, IconCandles, IconTarget } from "@/components/v2/Icon";
 import { getLocale } from "@/lib/i18n-server";
 import type { Locale } from "@/lib/i18n";
 import { getEvaluationSummary } from "@/lib/evaluation-data";
@@ -8,6 +10,8 @@ import { getForecastHistory } from "@/lib/forecast-history-data";
 import { FORECAST_HORIZONS, FORECAST_VERSION } from "@/lib/forecast-data";
 
 export const dynamic = "force-dynamic";
+
+const ICON_CLASS = "h-3.5 w-3.5";
 
 const STR = {
   en: {
@@ -159,7 +163,7 @@ export default async function PerformancePage() {
           const group = evaluation.groups.find((g) => g.horizon === horizon && g.forecastVersion === FORECAST_VERSION);
 
           return (
-            <Card key={horizon} title={`${horizon} ${t.trackRecord}`}>
+            <Card key={horizon} title={`${horizon} ${t.trackRecord}`} icon={<IconTarget className={ICON_CLASS} />}>
               {!group || group.insufficientData ? (
                 <p className="text-sm text-v2-muted">{t.notEnough(group?.sampleSize ?? 0, group?.minSampleSize ?? 20)}</p>
               ) : (
@@ -191,8 +195,9 @@ export default async function PerformancePage() {
                   />
 
                   <div className="pt-2 border-t border-v2-border">
-                    <p className="text-[11px] text-v2-muted mb-1" title={t.outOfSampleTip}>
+                    <p className="flex items-center gap-1.5 text-[11px] text-v2-muted mb-1">
                       {t.outOfSample}
+                      <InfoTooltip text={t.outOfSampleTip} />
                     </p>
                     {group.outOfSample.insufficientData ? (
                       <p className="text-xs text-v2-muted">
@@ -215,11 +220,11 @@ export default async function PerformancePage() {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
-        <Card title={t.chart("DAILY")}>
+        <Card title={t.chart("DAILY")} icon={<IconBars className={ICON_CLASS} />}>
           <ForecastVsActualChart rows={dailyHistory.rows} t={t} />
         </Card>
 
-        <Card title={t.recentHistory} padded={false}>
+        <Card title={t.recentHistory} icon={<IconCalendar className={ICON_CLASS} />} padded={false}>
           <div className="overflow-x-auto max-h-[280px] overflow-y-auto">
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-v2-surface">
@@ -249,7 +254,7 @@ export default async function PerformancePage() {
         </Card>
       </div>
 
-      <Card title={t.backtest}>
+      <Card title={t.backtest} icon={<IconCandles className={ICON_CLASS} />}>
         {backtest.error || backtest.sampleSize === 0 ? (
           <p className="text-sm text-v2-muted">{backtest.error ?? "--"}</p>
         ) : (

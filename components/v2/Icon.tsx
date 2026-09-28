@@ -99,3 +99,22 @@ export function IconGlobe({ className }: IconProps) {
     </svg>
   );
 }
+
+export function IconAlertTriangle({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M10 3.2 17.3 16H2.7L10 3.2Z" />
+      <path d="M10 8.3v3.6" />
+      <circle cx="10" cy="14.2" r="0.15" fill="currentColor" stroke="currentColor" strokeWidth={1.2} />
+    </svg>
+  );
+}
+
+export function IconShield({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M10 3 16 5.3v4.6c0 4-2.6 6.6-6 7.6-3.4-1-6-3.6-6-7.6V5.3L10 3Z" />
+      <path d="m7.3 10 1.8 1.8 3.6-3.8" />
+    </svg>
+  );
+}

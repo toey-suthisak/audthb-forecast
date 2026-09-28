@@ -1,7 +1,10 @@
 import Card from "@/components/v2/Card";
+import { IconAlertTriangle, IconCompass, IconExchange, IconGlobe, IconLayers, IconShield, IconTarget } from "@/components/v2/Icon";
 import { getLocale } from "@/lib/i18n-server";
 
 export const dynamic = "force-dynamic";
+
+const ICON_CLASS = "h-3.5 w-3.5";
 
 const STR = {
   en: {
@@ -110,7 +113,7 @@ export default async function AboutPage() {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
-        <Card title={t.methodology}>
+        <Card title={t.methodology} icon={<IconLayers className={ICON_CLASS} />}>
           <p className="text-sm text-v2-muted mb-4">{t.methodologyIntro}</p>
           <ol className="space-y-3">
             {t.factors.map((f, i) => (
@@ -130,16 +133,16 @@ export default async function AboutPage() {
         </Card>
 
         <div className="space-y-6">
-          <Card title={t.regime}>
+          <Card title={t.regime} icon={<IconCompass className={ICON_CLASS} />}>
             <p className="text-sm text-v2-muted leading-relaxed">{t.regimeBody}</p>
           </Card>
-          <Card title={t.prefund}>
+          <Card title={t.prefund} icon={<IconExchange className={ICON_CLASS} />}>
             <p className="text-sm text-v2-muted leading-relaxed">{t.prefundBody}</p>
           </Card>
         </div>
       </div>
 
-      <Card title={t.dataSources}>
+      <Card title={t.dataSources} icon={<IconGlobe className={ICON_CLASS} />}>
         <div className="grid sm:grid-cols-2 gap-x-8 gap-y-2 text-sm">
           {t.sources.map((s) => (
             <p key={s.name} className="flex justify-between gap-3 py-1 border-b border-v2-border last:border-b-0 sm:border-none">
@@ -150,7 +153,7 @@ export default async function AboutPage() {
         </div>
       </Card>
 
-      <Card title={t.limitations}>
+      <Card title={t.limitations} icon={<IconAlertTriangle className={ICON_CLASS} />} className="bg-amber-50/40 dark:bg-amber-500/5">
         <ul className="space-y-2 list-disc list-inside text-sm text-v2-muted">
           {t.limitationsBody.map((line, i) => (
             <li key={i} className="leading-relaxed">{line}</li>
@@ -159,10 +162,10 @@ export default async function AboutPage() {
       </Card>
 
       <div className="grid sm:grid-cols-2 gap-6">
-        <Card title={t.goal} className="bg-blue-50/50 dark:bg-blue-500/5">
+        <Card title={t.goal} icon={<IconTarget className={ICON_CLASS} />} className="bg-blue-50/50 dark:bg-blue-500/5">
           <p className="text-sm text-v2-muted leading-relaxed">{t.goalBody}</p>
         </Card>
-        <Card title={t.notAdvice} className="bg-amber-50/50 dark:bg-amber-500/5">
+        <Card title={t.notAdvice} icon={<IconShield className={ICON_CLASS} />} className="bg-amber-50/50 dark:bg-amber-500/5">
           <p className="text-sm text-v2-muted leading-relaxed">{t.notAdviceBody}</p>
         </Card>
       </div>

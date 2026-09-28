@@ -370,7 +370,7 @@ export default async function DashboardPage() {
   const dailyForecast = technicalOutlook.forecasts.find((f) => f.horizon === "DAILY") ?? null;
 
   return (
-    <div className="relative space-y-8">
+    <div className="relative space-y-6">
       <div className="pointer-events-none absolute inset-x-0 -top-6 -z-10 flex justify-center overflow-hidden">
         <div className="h-64 w-[36rem] rounded-full bg-blue-400/10 dark:bg-blue-500/10 blur-3xl" />
       </div>
