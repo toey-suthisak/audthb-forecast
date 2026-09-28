@@ -1782,3 +1782,58 @@ honest, not a bug: RBA's F11.1 series is only published to 2 decimal
 places, unlike the live feed's 4-5. Verified on both Dashboard and
 Analysis tabs, checked 375px mobile (button row wraps cleanly, no
 overflow). `npx tsc --noEmit` and `npx next build` both pass clean.
+
+## R3/S3 breakout narrative, and a real chart-scale bug fixed (2026-09-28)
+
+User asked about a screenshot where price had broken above R3 ("ราคาผ่าน
+แนวต้านแล้วควรทำยังไงต่อ") -- answered directly in chat with the textbook
+two-sided interpretation (continuation vs. overextension) plus this
+project's own real accuracy caveat (DAILY doesn't beat baseline), not
+directive advice. Separately **declined** a follow-up ask to make the
+app's own guidance read like actual investment advice -- conflicts with
+this project's own repeatedly-reaffirmed stance (see the "Decision
+Snapshot" entry above, which already declined stripping the honesty
+labels once) and with the real numbers themselves (28% vs. 30% baseline
+doesn't support confident-sounding advice). Did implement the
+non-advice part of the same ask: a real "beyond R3 / beyond S3"
+narrative line.
+
+**`lib/technical-outlook-data.ts`**: the existing above-R1/below-S1/
+between-range narrative branch only ever compared against R1/S1, so a
+move beyond R3/S3 (the pivot's outermost band) still read as generic
+"above R1" -- undersells how unusual that is. Added `beyondR3`/`beyondS3`
+strings (checked before the R1/S1 branch) stating the two-sided
+textbook interpretation explicitly (momentum continuation vs.
+overextension) and pointing at RSI/trend and Score Breakdown as real
+things to check alongside it -- still descriptive, not a directive
+("should"), consistent with every other narrative line on this page.
+
+**Real bug found and fixed while investigating "make each chart's scale
+easier to read"**: screenshotted the live 1H chart and found all 7
+pivot reference lines (R3-S3) crammed into an illegible overlapping
+cluster near one edge, while the price line dominated the rest of the
+chart. Root cause: `RangeChart`'s y-axis domain was computed from
+*price series + all 7 pivot levels combined*. A 1H/4H pivot (built from
+one recent bar) can sit in a much tighter band than that timeframe's
+own multi-bar series range (e.g. 1H pivot spanned ~0.09 THB while the
+4-day 1H series it was drawn against spanned ~0.4 THB after a real
+swing) -- forcing both onto one scale squeezed the whole pivot ladder
+into a sliver. Fixed by driving the domain from the real price series
+alone (plus current rate); pivot levels that fall within that domain
+still draw normally, but a level outside it is now simply not drawn
+(most often affects R3/S3 on 1H/4H) instead of distorting the whole
+chart to fit it -- a level far from the visible price action isn't
+relevant to what's on screen anyway. DAILY/WEEKLY were largely
+unaffected already (their pivot and series naturally sit on a similar
+scale), but now use the same, single, more principled rule.
+
+Verified live: 1H chart went from an unreadable 7-line cluster to 6
+cleanly-spaced lines (R3 correctly omitted, off-domain); 4H similarly
+dropped S3; DAILY on mobile (375px) still shows R3-S1 spaced cleanly
+with S2/S3 correctly omitted when the visible price range doesn't reach
+them. No visible horizontal overflow on mobile (a `document.body.
+scrollWidth` check flagged existing off-screen `InfoTooltip` panels,
+but those predate this session and are already handled by the
+`overflow-x: hidden` fix documented earlier in this file -- confirmed
+via screenshot, not just the raw measurement). `npx tsc --noEmit` and
+`npx next build` both pass clean.

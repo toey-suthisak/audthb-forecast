@@ -54,6 +54,10 @@ const STR = {
       `Price is trading below the pivot's first support (${s1.toFixed(4)}). Losing that level opens the way toward S2 (${s2.toFixed(4)}).`,
     betweenS1R1: (s1: number, r1: number) =>
       `Price is sitting inside the pivot's normal range (${s1.toFixed(4)} - ${r1.toFixed(4)}) -- no breakout either way yet.`,
+    beyondR3: (r3: number) =>
+      `Price is trading beyond the pivot's outer resistance (R3, ${r3.toFixed(4)}) -- outside the normal range this pivot was built from. In classic pivot analysis that can mean either strong continued momentum or an overextended move due for a pullback; the level itself doesn't say which -- check RSI/trend and the Score Breakdown's own drivers alongside it.`,
+    beyondS3: (s3: number) =>
+      `Price is trading beyond the pivot's outer support (S3, ${s3.toFixed(4)}) -- outside the normal range this pivot was built from. In classic pivot analysis that can mean either strong continued downside momentum or an overextended move due for a bounce; the level itself doesn't say which -- check RSI/trend and the Score Breakdown's own drivers alongside it.`,
     macroSupportive: "Macro/Policy is currently supportive of AUD",
     macroDrag: "Macro/Policy is currently a drag on AUD",
     macroNeutral: "Macro/Policy is roughly neutral today",
@@ -130,6 +134,10 @@ const STR = {
       `ราคาปัจจุบันอยู่ใต้แนวรับแรก (${s1.toFixed(4)}) ถ้าหลุดระดับนี้ เป้าถัดไปคือแนวรับ 2 ที่ ${s2.toFixed(4)}`,
     betweenS1R1: (s1: number, r1: number) =>
       `ราคาปัจจุบันยังอยู่ในกรอบปกติของ Pivot (${s1.toFixed(4)} - ${r1.toFixed(4)}) ยังไม่ทะลุไปทางใดทางหนึ่ง`,
+    beyondR3: (r3: number) =>
+      `ราคาปัจจุบันทะลุแนวต้านสุดขอบ (R3, ${r3.toFixed(4)}) ออกไปแล้ว -- อยู่นอกกรอบปกติที่ pivot นี้คำนวณไว้ ตามหลัก pivot แบบคลาสสิก ตีความได้สองทาง: โมเมนตัมขาขึ้นแข็งแกร่งต่อเนื่อง หรือราคายืดเกินกรอบ (overextended) มีโอกาสย่อกลับ -- ตัวระดับเองไม่บอกว่าจะเป็นแบบไหน ควรดู RSI/แนวโน้ม และปัจจัยขับเคลื่อนใน Score Breakdown ประกอบด้วย`,
+    beyondS3: (s3: number) =>
+      `ราคาปัจจุบันหลุดแนวรับสุดขอบ (S3, ${s3.toFixed(4)}) ไปแล้ว -- อยู่นอกกรอบปกติที่ pivot นี้คำนวณไว้ ตามหลัก pivot แบบคลาสสิก ตีความได้สองทาง: โมเมนตัมขาลงแข็งแกร่งต่อเนื่อง หรือราคายืดเกินกรอบ (overextended) มีโอกาสดีดกลับ -- ตัวระดับเองไม่บอกว่าจะเป็นแบบไหน ควรดู RSI/แนวโน้ม และปัจจัยขับเคลื่อนใน Score Breakdown ประกอบด้วย`,
     macroSupportive: "ปัจจัย Macro/นโยบาย วันนี้ยังหนุน AUD",
     macroDrag: "ปัจจัย Macro/นโยบาย วันนี้เป็นแรงกดดัน AUD",
     macroNeutral: "ปัจจัย Macro/นโยบาย วันนี้ค่อนข้างเป็นกลาง",
@@ -587,7 +595,9 @@ export async function getTechnicalOutlook(
   }
 
   if (currentRate !== null) {
-    if (currentRate > pivots.r1) narrative.push(t.aboveR1(pivots.r1, pivots.r2));
+    if (currentRate > pivots.r3) narrative.push(t.beyondR3(pivots.r3));
+    else if (currentRate < pivots.s3) narrative.push(t.beyondS3(pivots.s3));
+    else if (currentRate > pivots.r1) narrative.push(t.aboveR1(pivots.r1, pivots.r2));
     else if (currentRate < pivots.s1) narrative.push(t.belowS1(pivots.s1, pivots.s2));
     else narrative.push(t.betweenS1R1(pivots.s1, pivots.r1));
   }

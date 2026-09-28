@@ -141,12 +141,22 @@ export default function RangeChart({
 
   const closes = series.map((p) => p.close);
 
-  const pivotLevels = pivots ? [pivots.r3, pivots.r2, pivots.r1, pivots.pivot, pivots.s1, pivots.s2, pivots.s3] : [];
-  const allValues = [...closes, ...pivotLevels, ...(currentRate !== null ? [currentRate] : [])];
+  // Scale is driven by the real price series alone (plus the current
+  // rate), never by pivot levels -- a pivot computed from a single
+  // recent bar (especially 1H/4H) can sit in a much tighter band than
+  // the series' own real swing over its full visible window, and
+  // forcing every pivot line into that scale used to squeeze the whole
+  // R3-S3 ladder into an unreadable cluster of overlapping labels while
+  // the price line dominated the rest of the chart. Pivot lines that
+  // fall outside this real price-driven window are simply not drawn
+  // (see referenceLines below) instead of distorting the scale to fit
+  // them -- a level far from the visible price action isn't relevant to
+  // what's on screen right now anyway.
+  const priceValues = [...closes, ...(currentRate !== null ? [currentRate] : [])];
 
-  const rawMin = Math.min(...allValues);
-  const rawMax = Math.max(...allValues);
-  const padding = (rawMax - rawMin) * 0.1 || 0.01;
+  const rawMin = Math.min(...priceValues);
+  const rawMax = Math.max(...priceValues);
+  const padding = (rawMax - rawMin) * 0.12 || 0.01;
   const min = rawMin - padding;
   const max = rawMax + padding;
   const span = max - min || 1;
@@ -171,7 +181,7 @@ export default function RangeChart({
         { value: pivots.s1, label: "S1" },
         { value: pivots.s2, label: "S2" },
         { value: pivots.s3, label: "S3" },
-      ]
+      ].filter((line) => line.value >= min && line.value <= max)
     : [];
 
   // Faint horizontal gridlines for scale reference, independent of the
