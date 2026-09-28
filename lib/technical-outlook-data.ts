@@ -243,6 +243,8 @@ export type ForecastEntry = {
   } | null;
 };
 
+export type ChartPoint = { date: string; close: number };
+
 export type TechnicalOutlook = {
   available: boolean;
   disclaimer: string;
@@ -252,6 +254,17 @@ export type TechnicalOutlook = {
   swingLow: number | null;
   swingLookbackDays: number;
   priceSeries: PricePoint[];
+  // Same real prices as priceSeries, just at 1H/4H/weekly resolution
+  // instead of daily -- see the "MULTI-TIMEFRAME BARS" section below for
+  // where each comes from. hourly/fourHour pivots also feed the 1H/4H
+  // ForecastEntry.pivots above (single source of truth, not a second
+  // calculation that could drift from what the Forecast cards show).
+  hourlySeries: ChartPoint[];
+  fourHourSeries: ChartPoint[];
+  weeklySeries: ChartPoint[];
+  hourlyPivots: PivotLevels | null;
+  fourHourPivots: PivotLevels | null;
+  weeklyPivots: PivotLevels | null;
   smaShortPeriod: number | null;
   smaShortValue: number | null;
   smaLongPeriod: number | null;
@@ -343,83 +356,90 @@ function classicPivots(bar: DailyBar): PivotLevels {
 }
 
 // =========================================================
-// INTRADAY PIVOTS (1H / 4H)
+// MULTI-TIMEFRAME BARS (1H / 4H / WEEKLY)
 //
 // Same classic pivot formula as the daily pivot, just computed from
-// the most recently *completed* 1-hour / 4-hour OHLC bar instead of
-// the previous completed calendar day -- so the 1H/4H Forecast cards
-// get their own real support/resistance basis instead of all three
-// horizons reusing the single daily pivot. Bucketed in UTC (the
-// standard FX 4H-candle convention: 00/04/08/12/16/20 UTC) rather than
-// Bangkok calendar time -- unlike the daily bars, there's no
-// meaningful "trading day" boundary at this resolution.
+// the most recently *completed* bar of each timeframe instead of the
+// previous completed calendar day -- so the 1H/4H Forecast cards (and
+// the Price & Technical / Price & Chart timeframe selector) get their
+// own real support/resistance basis instead of every timeframe reusing
+// the single daily pivot. 1H/4H bucketed in UTC (the standard FX
+// 4H-candle convention: 00/04/08/12/16/20 UTC), not Bangkok calendar
+// time -- there's no meaningful "trading day" boundary at that
+// resolution the way there is for a full day.
 //
-// Built directly from raw market_prices ticks (10-min resolution)
-// over a short, bounded recent window -- unlike the daily pivot
-// (which needed the server-side get_daily_price_bars function to
-// escape Supabase's 1000-row cap over up to 60 days), ~30 hours of
-// 10-min ticks is only ~180 rows, nowhere near that cap, so a direct
-// query is fine here.
+// Aggregated server-side via get_hourly_price_bars (see migration) --
+// same reason as get_daily_price_bars: PostgREST hard-caps any query at
+// 1000 rows, and AUD/THB accumulates ~140 raw ticks/day, so a 1H/4H
+// chart asking for real weeks of history would truncate on a raw fetch.
+// Aggregating in SQL returns one row per bucket instead, regardless of
+// how far back p_since asks.
 // =========================================================
 
-const INTRADAY_LOOKBACK_HOURS = 30;
+const HOURLY_CHART_LOOKBACK_HOURS = 96; // ~4 real days of 1H bars
+const FOUR_HOUR_CHART_LOOKBACK_HOURS = 24 * 21; // ~3 real weeks of 4H bars
 
-type RawTick = { rate: number | string; market_timestamp: string };
+type HourlyBarRow = { bar_start: string; open: number | string; high: number | string; low: number | string; close: number | string };
 
-function bucketIntradayBars(rows: RawTick[], bucketHours: number): DailyBar[] {
-  const bucketMs = bucketHours * 60 * 60 * 1000;
-  const buckets = new Map<number, { open: number; high: number; low: number; close: number }>();
+async function fetchBucketedBars(bucketHours: number, lookbackHours: number): Promise<DailyBar[]> {
+  const since = new Date(Date.now() - lookbackHours * 60 * 60 * 1000);
 
-  const sorted = [...rows].sort(
-    (a, b) => new Date(a.market_timestamp).getTime() - new Date(b.market_timestamp).getTime(),
-  );
+  const { data, error } = await supabaseAdmin.rpc("get_hourly_price_bars", {
+    p_symbol: "AUD/THB",
+    p_since: since.toISOString(),
+    p_bucket_hours: bucketHours,
+  });
 
-  for (const row of sorted) {
-    const price = Number(row.rate);
-    if (!Number.isFinite(price)) continue;
+  if (error || !data) return [];
 
-    const bucketStart = Math.floor(new Date(row.market_timestamp).getTime() / bucketMs) * bucketMs;
-    const existing = buckets.get(bucketStart);
-
-    if (!existing) {
-      buckets.set(bucketStart, { open: price, high: price, low: price, close: price });
-    } else {
-      existing.high = Math.max(existing.high, price);
-      existing.low = Math.min(existing.low, price);
-      existing.close = price;
-    }
-  }
-
-  return Array.from(buckets.entries())
-    .sort((a, b) => a[0] - b[0])
-    .map(([bucketStart, bar]) => ({ date: new Date(bucketStart).toISOString(), ...bar }));
+  return ((data ?? []) as HourlyBarRow[])
+    .map((row) => ({
+      date: row.bar_start,
+      open: Number(row.open),
+      high: Number(row.high),
+      low: Number(row.low),
+      close: Number(row.close),
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-async function getIntradayPivots(): Promise<{ oneHour: PivotLevels | null; fourHour: PivotLevels | null }> {
-  const since = new Date(Date.now() - INTRADAY_LOOKBACK_HOURS * 60 * 60 * 1000);
+// Weekly bars come from backtest_daily_rates (RBA F11.1, 2023 onward),
+// not the live feed -- the live feed only goes back to 2026-09-11 (~2
+// real weeks), nowhere near enough for a meaningful weekly view. Same
+// "use the real longer source" reasoning as the 3-month/6-month
+// RSI/MA/MACD charts on Analysis, which already use this same table.
+// Aggregated server-side via get_weekly_backtest_bars for the same
+// 1000-row-cap reason (937 rows today, growing).
+type WeeklyBarRow = { week_start: string; open: number | string; high: number | string; low: number | string; close: number | string };
+const WEEKLY_CHART_MAX_WEEKS = 52;
 
-  const { data, error } = await supabaseAdmin
-    .from("market_prices")
-    .select("rate, market_timestamp")
-    .eq("symbol", "AUD/THB")
-    .gte("market_timestamp", since.toISOString())
-    .order("market_timestamp", { ascending: true });
+async function fetchWeeklyBars(): Promise<DailyBar[]> {
+  const { data, error } = await supabaseAdmin.rpc("get_weekly_backtest_bars", {});
+  if (error || !data) return [];
 
-  if (error || !data || data.length === 0) {
-    return { oneHour: null, fourHour: null };
-  }
+  return ((data ?? []) as WeeklyBarRow[])
+    .map((row) => ({
+      date: row.week_start,
+      open: Number(row.open),
+      high: Number(row.high),
+      low: Number(row.low),
+      close: Number(row.close),
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-WEEKLY_CHART_MAX_WEEKS);
+}
 
-  // Drop the current, still-filling-in bucket -- same "only completed
-  // bars form a pivot basis" rule as the daily pivot above.
-  const completedBars = (bars: DailyBar[]) => (bars.length > 1 ? bars.slice(0, -1) : bars);
+// Drop the current, still-filling-in bar -- same "only completed bars
+// form a pivot basis" rule as the daily pivot above. Kept as its own
+// full series (this function's *input*) for charting, since a chart
+// line should still reach "now" the way the daily priceSeries does.
+function completedBarsOnly(bars: DailyBar[]): DailyBar[] {
+  return bars.length > 1 ? bars.slice(0, -1) : bars;
+}
 
-  const oneHourBars = completedBars(bucketIntradayBars(data, 1));
-  const fourHourBars = completedBars(bucketIntradayBars(data, 4));
-
-  return {
-    oneHour: oneHourBars.length > 0 ? classicPivots(oneHourBars[oneHourBars.length - 1]) : null,
-    fourHour: fourHourBars.length > 0 ? classicPivots(fourHourBars[fourHourBars.length - 1]) : null,
-  };
+function pivotsFromBars(bars: DailyBar[]): PivotLevels | null {
+  const completed = completedBarsOnly(bars);
+  return completed.length > 0 ? classicPivots(completed[completed.length - 1]) : null;
 }
 
 function round(value: number, decimals = 4): number {
@@ -479,6 +499,12 @@ export async function getTechnicalOutlook(
     swingLow: null,
     swingLookbackDays: SWING_LOOKBACK_DAYS,
     priceSeries: [],
+    hourlySeries: [],
+    fourHourSeries: [],
+    weeklySeries: [],
+    hourlyPivots: null,
+    fourHourPivots: null,
+    weeklyPivots: null,
     smaShortPeriod: null,
     smaShortValue: null,
     smaLongPeriod: null,
@@ -608,20 +634,29 @@ export async function getTechnicalOutlook(
   // to fold the app's existing Forecast panel (previously its own
   // section in Hero.tsx) into this one, per the user's request to merge
   // it with the technical levels it should be read against.
-  const [consensus, outcomes, eventRisk, confidence, evaluation, intradayPivots] = await Promise.all([
-    getEconomicConsensus(),
-    getRecentEconomicOutcomes(),
-    getEventRisk(),
-    getConfidence(dashboard, locale),
-    getEvaluationSummary(),
-    getIntradayPivots(),
-  ]);
+  const [consensus, outcomes, eventRisk, confidence, evaluation, oneHourBars, fourHourBars, weeklyBars] =
+    await Promise.all([
+      getEconomicConsensus(),
+      getRecentEconomicOutcomes(),
+      getEventRisk(),
+      getConfidence(dashboard, locale),
+      getEvaluationSummary(),
+      fetchBucketedBars(1, HOURLY_CHART_LOOKBACK_HOURS),
+      fetchBucketedBars(4, FOUR_HOUR_CHART_LOOKBACK_HOURS),
+      fetchWeeklyBars(),
+    ]);
+
+  const hourlyPivots = pivotsFromBars(oneHourBars);
+  const fourHourPivots = pivotsFromBars(fourHourBars);
+  const weeklyPivots = pivotsFromBars(weeklyBars);
 
   const pivotsByHorizon: Record<ForecastHorizon, PivotLevels | null> = {
-    "1H": intradayPivots.oneHour,
-    "4H": intradayPivots.fourHour,
+    "1H": hourlyPivots,
+    "4H": fourHourPivots,
     DAILY: pivots,
   };
+
+  const toChartPoints = (barList: DailyBar[]) => barList.map((bar) => ({ date: bar.date, close: round(bar.close) }));
 
   // Released first (most recently actionable -- the number is already
   // out), then upcoming -- mirrors reading the news in the order it
@@ -756,6 +791,12 @@ export async function getTechnicalOutlook(
     swingLow: round(swingLow),
     swingLookbackDays: SWING_LOOKBACK_DAYS,
     priceSeries,
+    hourlySeries: toChartPoints(oneHourBars),
+    fourHourSeries: toChartPoints(fourHourBars),
+    weeklySeries: toChartPoints(weeklyBars),
+    hourlyPivots,
+    fourHourPivots,
+    weeklyPivots,
     smaShortPeriod: hasTrend ? smaShortPeriod : null,
     smaShortValue,
     smaLongPeriod: smaLongValue !== null ? smaLongPeriod : null,

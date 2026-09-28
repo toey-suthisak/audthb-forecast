@@ -283,9 +283,16 @@ export default function AnalysisTabs({
           >
             {technicalOutlook.priceSeries.length > 0 ? (
               <RangeChart
-                series={technicalOutlook.priceSeries.map((p) => ({ date: p.date, close: p.close }))}
+                timeframes={{
+                  "1H": { series: technicalOutlook.hourlySeries, pivots: technicalOutlook.hourlyPivots },
+                  "4H": { series: technicalOutlook.fourHourSeries, pivots: technicalOutlook.fourHourPivots },
+                  DAILY: {
+                    series: technicalOutlook.priceSeries.map((p) => ({ date: p.date, close: p.close })),
+                    pivots: technicalOutlook.pivots,
+                  },
+                  WEEKLY: { series: technicalOutlook.weeklySeries, pivots: technicalOutlook.weeklyPivots },
+                }}
                 locale={locale}
-                pivots={technicalOutlook.pivots}
                 currentRate={technicalOutlook.currentRate}
                 swingLow={technicalOutlook.swingLow}
                 swingHigh={technicalOutlook.swingHigh}

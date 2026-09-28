@@ -1720,3 +1720,65 @@ pivot, not a second calculation that could drift). Spread widens
 (was 53%), now in line with 1H (61%) and DAILY (52%). Checked 375px
 mobile: no overflow. `npx tsc --noEmit` and `npx next build` both pass
 clean.
+
+## Price & Technical / Price & Chart: real 1H/4H/Daily/Weekly timeframe selector, replacing the 7D/30D/90D/All zoom (2026-09-24, same day)
+
+User shared a screenshot of the Dashboard's "Price & Technical" card and
+asked for the chart's time buttons to become 1H/4H/daily/weekly, with
+resistance/support changing per timeframe too -- the same multi-
+timeframe idea as the Forecast cards above, now applied to the actual
+price chart (which previously only let you zoom into different-length
+windows of the *same* daily series, not switch resolution).
+
+**Two new server-side aggregation functions**, same reasoning as the
+existing `get_daily_price_bars`: PostgREST's 1000-row cap makes a raw-
+tick fetch impossible for a real multi-week 1H/4H view (AUD/THB
+accumulates ~140 ticks/day), so both aggregate in SQL instead of
+fetching raw rows:
+- `get_hourly_price_bars(p_symbol, p_since, p_bucket_hours)`
+  (`supabase/migrations/20260924_hourly_price_bars_function.sql`) --
+  generalizes the daily function to arbitrary sub-daily bucket sizes,
+  UTC-epoch-aligned (a 4-hour bucket lines up with the standard FX
+  4H-candle convention, 00/04/08/12/16/20 UTC, since UNIX epoch is UTC
+  midnight).
+- `get_weekly_backtest_bars(p_since)` (`supabase/migrations/
+  20260924_weekly_backtest_bars_function.sql`) -- weekly bars come from
+  `backtest_daily_rates` (RBA F11.1, 2023 onward), not the live feed,
+  which only has ~2 real weeks of history -- nowhere near enough for a
+  meaningful weekly view. Same real-longer-source reasoning already used
+  for Analysis's 3-month/6-month RSI/MA/MACD charts, which use this same
+  table. Aggregated server-side too since this table is already at 937
+  rows and growing -- avoids setting up the exact same 1000-row-cap bug
+  found and fixed in `forecast_outcomes` earlier this session.
+
+`lib/technical-outlook-data.ts`: replaced the earlier raw-tick-based
+`getIntradayPivots()` (added for the Forecast cards' per-horizon pivots)
+with `fetchBucketedBars()`/`fetchWeeklyBars()` calling these RPCs --
+single source of truth, so the chart's pivot overlay and the Forecast
+cards' R1/S1 line can never drift apart. `TechnicalOutlook` gained
+`hourlySeries`/`fourHourSeries`/`weeklySeries` (real OHLC-close series)
+and `hourlyPivots`/`fourHourPivots`/`weeklyPivots`.
+
+`components/v2/RangeChart.tsx` rebuilt around a `timeframes` prop (one
+`{series, pivots}` pair per `1H | 4H | DAILY | WEEKLY` key) instead of a
+single series + a `RANGE_DAYS` zoom-window slice -- switching buttons
+now changes resolution and pivot basis together, not just how much of
+one series is visible. Both real call sites (Dashboard's "Price &
+Technical", Analysis's "Price & Chart") updated to build this prop from
+the same `TechnicalOutlook` fields the Forecast cards already use.
+Caption line ("Showing N ...") and the pivot-basis line now read
+correctly per timeframe (e.g. a real formatted Bangkok date+time for
+1H/4H's ISO basis, unchanged plain dates for DAILY/WEEKLY).
+
+Verified live against real data: 1H shows 97 real 1H bars (2026-09-20
+to 2026-09-24, ~4 days), 4H shows 79 real 4H bars (2026-09-11 to
+2026-09-24, the full live-feed history), Weekly shows 52 real weeks
+(2025-09-29 to 2026-09-21, a full year of real RBA data) -- each with
+its own pivot overlay, and the 1H/4H pivots exactly match the R1/S1
+already shown on the corresponding Forecast card (single source of
+truth confirmed, not a second drifting calculation). Weekly pivot
+values look suspiciously round (e.g. exactly 0.01 apart) -- confirmed
+honest, not a bug: RBA's F11.1 series is only published to 2 decimal
+places, unlike the live feed's 4-5. Verified on both Dashboard and
+Analysis tabs, checked 375px mobile (button row wraps cleanly, no
+overflow). `npx tsc --noEmit` and `npx next build` both pass clean.

@@ -6,34 +6,38 @@ import type { PivotLevels } from "@/lib/technical-outlook-data";
 
 export type RangePoint = { date: string; close: number };
 
-// Ranges are daily-bar granularity (this app's real price history is
-// stored as one bar per Bangkok day -- see get_daily_price_bars in
-// supabase/migrations), not the mockup's literal "1D" intraday view --
-// renamed to what's actually being shown rather than promising
-// intraday resolution this component doesn't have. Real history is
-// currently only ~10 days deep, so every range button shows the same
-// handful of real points until more real data accumulates -- no padding.
-const RANGE_DAYS = [7, 30, 90, 365] as const;
-type RangeDays = (typeof RANGE_DAYS)[number];
+// Real multi-timeframe resolutions, not just different zoom windows into
+// the same daily series -- 1H/4H come from real intraday OHLC bars
+// (market_prices, aggregated server-side, see get_hourly_price_bars),
+// DAILY from this app's own real daily bars (get_daily_price_bars),
+// WEEKLY from the longer real RBA F11.1 series (backtest_daily_rates,
+// 2023 onward -- the live feed alone only has ~2 real weeks, nowhere
+// near enough for a meaningful weekly view). Each timeframe carries its
+// own real pivot basis too (see lib/technical-outlook-data.ts), not the
+// single daily pivot reused everywhere.
+export type TimeframeKey = "1H" | "4H" | "DAILY" | "WEEKLY";
+export const TIMEFRAME_KEYS: TimeframeKey[] = ["1H", "4H", "DAILY", "WEEKLY"];
 
 const STR = {
   en: {
-    label: (days: RangeDays) => (days === 365 ? "All" : `${days}D`),
-    showing: (n: number, from: string, to: string) => `Showing ${n} real day(s), ${from} to ${to}`,
-    notEnough: "Not enough price history to chart yet.",
+    label: { "1H": "1H", "4H": "4H", DAILY: "Daily", WEEKLY: "Weekly" } as Record<TimeframeKey, string>,
+    unit: { "1H": "1H bar(s)", "4H": "4H bar(s)", DAILY: "real day(s)", WEEKLY: "real week(s)" } as Record<TimeframeKey, string>,
+    showing: (n: number, unit: string, from: string, to: string) => `Showing ${n} ${unit}, ${from} to ${to}`,
+    notEnough: "Not enough price history to chart at this resolution yet.",
     currentPrice: "Current price",
     change1H: "1H change",
     swingRange: (days: number) => `${days}-day range`,
-    pivotBasis: (date: string) => `Pivot based on ${date}'s close`,
+    pivotBasis: (label: string) => `Pivot based on ${label}`,
   },
   th: {
-    label: (days: RangeDays) => (days === 365 ? "ทั้งหมด" : `${days} วัน`),
-    showing: (n: number, from: string, to: string) => `แสดงข้อมูลจริง ${n} วัน จาก ${from} ถึง ${to}`,
-    notEnough: "ข้อมูลราคายังไม่พอสำหรับตีกราฟ",
+    label: { "1H": "1 ชม.", "4H": "4 ชม.", DAILY: "รายวัน", WEEKLY: "รายสัปดาห์" } as Record<TimeframeKey, string>,
+    unit: { "1H": "แท่ง 1 ชม.", "4H": "แท่ง 4 ชม.", DAILY: "วันจริง", WEEKLY: "สัปดาห์จริง" } as Record<TimeframeKey, string>,
+    showing: (n: number, unit: string, from: string, to: string) => `แสดงข้อมูลจริง ${n} ${unit} จาก ${from} ถึง ${to}`,
+    notEnough: "ข้อมูลราคายังไม่พอสำหรับตีกราฟที่ความละเอียดนี้",
     currentPrice: "ราคาปัจจุบัน",
     change1H: "เปลี่ยนแปลง 1H",
     swingRange: (days: number) => `กรอบ ${days} วัน`,
-    pivotBasis: (date: string) => `คำนวณ Pivot จากราคาปิดวันที่ ${date}`,
+    pivotBasis: (label: string) => `คำนวณ Pivot จาก ${label}`,
   },
 } as const;
 
@@ -60,19 +64,37 @@ function smoothPath(points: { x: number; y: number }[]): string {
   return d;
 }
 
+// 1H/4H pivots are based on a bar identified by a full ISO timestamp
+// (not a calendar date like DAILY/WEEKLY) -- render it as a real local
+// date+time so the caption stays readable instead of dumping a raw ISO
+// string.
+function formatBasis(dateOrIso: string, timeframe: TimeframeKey): string {
+  if (timeframe !== "1H" && timeframe !== "4H") return dateOrIso;
+  const d = new Date(dateOrIso);
+  if (Number.isNaN(d.getTime())) return dateOrIso;
+  return d.toLocaleString("en-GB", {
+    timeZone: "Asia/Bangkok",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 export default function RangeChart({
-  series,
+  timeframes,
   locale,
-  pivots = null,
+  defaultTimeframe = "DAILY",
   currentRate = null,
   change1H = null,
   swingLow = null,
   swingHigh = null,
   swingDays = null,
 }: {
-  series: RangePoint[];
+  timeframes: Record<TimeframeKey, { series: RangePoint[]; pivots: PivotLevels | null }>;
   locale: Locale;
-  pivots?: PivotLevels | null;
+  defaultTimeframe?: TimeframeKey;
   currentRate?: number | null;
   change1H?: number | null;
   swingLow?: number | null;
@@ -80,14 +102,44 @@ export default function RangeChart({
   swingDays?: number | null;
 }) {
   const t = STR[locale];
-  const [range, setRange] = useState<RangeDays>(30);
+  const [timeframe, setTimeframe] = useState<TimeframeKey>(defaultTimeframe);
+
+  const active = timeframes[timeframe];
+  const series = active.series;
+  const pivots = active.pivots;
+
+  const timeframeBar = (
+    <div className="flex items-center gap-1.5">
+      {TIMEFRAME_KEYS.map((key) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => setTimeframe(key)}
+          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+            timeframe === key
+              ? "bg-blue-600 text-white shadow-sm"
+              : "text-v2-muted hover:bg-slate-100 dark:hover:bg-slate-800"
+          }`}
+        >
+          {t.label[key]}
+        </button>
+      ))}
+    </div>
+  );
 
   if (series.length < 2) {
-    return <p className="text-sm text-v2-muted">{t.notEnough}</p>;
+    return (
+      <div>
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
+          <div />
+          {timeframeBar}
+        </div>
+        <p className="text-sm text-v2-muted">{t.notEnough}</p>
+      </div>
+    );
   }
 
-  const sliced = series.slice(-range);
-  const closes = sliced.map((p) => p.close);
+  const closes = series.map((p) => p.close);
 
   const pivotLevels = pivots ? [pivots.r3, pivots.r2, pivots.r1, pivots.pivot, pivots.s1, pivots.s2, pivots.s3] : [];
   const allValues = [...closes, ...pivotLevels, ...(currentRate !== null ? [currentRate] : [])];
@@ -100,7 +152,7 @@ export default function RangeChart({
   const span = max - min || 1;
 
   const plotWidth = CHART_WIDTH - PAD_LEFT;
-  const stepX = sliced.length > 1 ? plotWidth / (sliced.length - 1) : 0;
+  const stepX = series.length > 1 ? plotWidth / (series.length - 1) : 0;
   const yFor = (v: number) => CHART_HEIGHT - ((v - min) / span) * CHART_HEIGHT;
 
   const points = closes.map((v, i) => ({ x: PAD_LEFT + i * stepX, y: yFor(v) }));
@@ -157,22 +209,7 @@ export default function RangeChart({
           )}
         </div>
 
-        <div className="flex items-center gap-1.5">
-          {RANGE_DAYS.map((days) => (
-            <button
-              key={days}
-              type="button"
-              onClick={() => setRange(days)}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                range === days
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-v2-muted hover:bg-slate-100 dark:hover:bg-slate-800"
-              }`}
-            >
-              {t.label(days)}
-            </button>
-          ))}
-        </div>
+        {timeframeBar}
       </div>
 
       <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} preserveAspectRatio="none" className="w-full h-[340px]">
@@ -220,8 +257,10 @@ export default function RangeChart({
       </svg>
 
       <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
-        <p className="text-[11px] text-v2-muted">{t.showing(sliced.length, sliced[0].date, sliced[sliced.length - 1].date)}</p>
-        {pivots && <p className="text-[11px] text-v2-muted">{t.pivotBasis(pivots.basedOnDate)}</p>}
+        <p className="text-[11px] text-v2-muted">
+          {t.showing(series.length, t.unit[timeframe], series[0].date, series[series.length - 1].date)}
+        </p>
+        {pivots && <p className="text-[11px] text-v2-muted">{t.pivotBasis(formatBasis(pivots.basedOnDate, timeframe))}</p>}
       </div>
     </div>
   );

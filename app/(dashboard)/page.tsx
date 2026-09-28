@@ -317,7 +317,12 @@ export default async function DashboardPage() {
     .filter((e) => e.actualValue === null && e.eventDate === todayKey)
     .sort((a, b) => a.eventDate.localeCompare(b.eventDate));
 
-  const rangeSeries = technicalOutlook.priceSeries.map((p) => ({ date: p.date, close: p.close }));
+  const chartTimeframes = {
+    "1H": { series: technicalOutlook.hourlySeries, pivots: technicalOutlook.hourlyPivots },
+    "4H": { series: technicalOutlook.fourHourSeries, pivots: technicalOutlook.fourHourPivots },
+    DAILY: { series: technicalOutlook.priceSeries.map((p) => ({ date: p.date, close: p.close })), pivots: technicalOutlook.pivots },
+    WEEKLY: { series: technicalOutlook.weeklySeries, pivots: technicalOutlook.weeklyPivots },
+  };
 
   const bars = technicalOutlook.priceSeries;
   const dailyChangePct =
@@ -494,9 +499,8 @@ export default async function DashboardPage() {
           }
         >
           <RangeChart
-            series={rangeSeries}
+            timeframes={chartTimeframes}
             locale={locale}
-            pivots={technicalOutlook.pivots}
             currentRate={technicalOutlook.currentRate}
           />
           <div className="grid grid-cols-4 gap-2 mt-4 pt-4 border-t border-v2-border">
