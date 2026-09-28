@@ -1837,3 +1837,37 @@ but those predate this session and are already handled by the
 `overflow-x: hidden` fix documented earlier in this file -- confirmed
 via screenshot, not just the raw measurement). `npx tsc --noEmit` and
 `npx next build` both pass clean.
+
+## WEEKLY chart's pivot labels still overlapped -- the previous fix was incomplete (2026-09-28)
+
+User screenshotted the WEEKLY chart right after the fix above and the
+pivot ladder was still an unreadable overlapping smear -- reproduced by
+reading the live SVG's `<text>` node y-coordinates directly (more
+reliable than eyeballing a screenshot): all 7 labels (R3..S3, values
+23.69-23.75) landed within y=32.0 to y=37.5, a 5.5px band, on a 340px-
+tall chart. The earlier fix (deriving the axis domain from price alone)
+only addressed pivot levels landing *outside* the visible price range;
+it did nothing for pivots that ARE inside range but naturally clustered
+close together in value -- true for WEEKLY because one week's own
+high/low is small next to the full 52-week series' range, so its whole
+R3-S3 ladder occupies only a sliver of the y-axis.
+
+**`components/v2/RangeChart.tsx`**: added a label-declutter pass.
+`referenceLines` now carries both a true `y` (unchanged, used for the
+dashed line itself -- stays at the real, accurate price level) and a
+separate `labelY` used only for the text. `labelY` starts equal to `y`,
+then a forward pass enforces an 11px minimum gap top-to-bottom, and a
+backward pass clamps the whole cluster within the chart's vertical
+bounds so it can't get pushed off the bottom edge. When a label's
+`labelY` ends up more than 2px from its line's true `y`, a thin leader
+line connects the label back to its actual level so the offset doesn't
+read as wrong. Lines that already have enough natural spacing (e.g.
+1H/4H, mostly unaffected by this bug) get `labelY === y` and render
+exactly as before.
+
+Verified live by reading the SVG `<text>` y-coordinates before/after:
+WEEKLY went from all 7 labels crammed into a 5.5px band to evenly
+spaced 11px apart (32.0, 43.0, 54.0, ... 98.0); 1H's own labels, which
+already had real gaps as large as 20px in places, were left at their
+natural positions (only pulled apart where two would otherwise
+collide). `npx tsc --noEmit` and `npx next build` both pass clean.

@@ -172,7 +172,15 @@ export default function RangeChart({
 
   const lastPoint = points[points.length - 1];
 
-  const referenceLines: { value: number; label: string; emphasis?: boolean }[] = pivots
+  // A single-bar pivot ladder (R3..S3) sits in a much tighter band than
+  // the price series' own full-window swing, especially on WEEKLY/1H
+  // where one bar's high-low is tiny next to the chart's real range. Text
+  // labels drawn at their true y can then land within a few px of each
+  // other and overlap into an unreadable smear. The dashed lines stay at
+  // their real, accurate y -- only the text labels get spread apart
+  // (min 11px gap) via a two-pass declutter, with a short leader when a
+  // label's forced position no longer sits on its own line.
+  const rawReferenceLines: { value: number; label: string; emphasis?: boolean }[] = pivots
     ? [
         { value: pivots.r3, label: "R3" },
         { value: pivots.r2, label: "R2" },
@@ -183,6 +191,22 @@ export default function RangeChart({
         { value: pivots.s3, label: "S3" },
       ].filter((line) => line.value >= min && line.value <= max)
     : [];
+
+  const LABEL_MIN_GAP = 11;
+  const referenceLines = rawReferenceLines
+    .map((line) => ({ ...line, y: yFor(line.value), labelY: yFor(line.value) }))
+    .sort((a, b) => a.y - b.y);
+  for (let i = 1; i < referenceLines.length; i++) {
+    referenceLines[i].labelY = Math.max(referenceLines[i].labelY, referenceLines[i - 1].labelY + LABEL_MIN_GAP);
+  }
+  if (referenceLines.length > 0) {
+    const lastIndex = referenceLines.length - 1;
+    referenceLines[lastIndex].labelY = Math.min(referenceLines[lastIndex].labelY, CHART_HEIGHT - 4);
+    for (let i = lastIndex - 1; i >= 0; i--) {
+      referenceLines[i].labelY = Math.min(referenceLines[i].labelY, referenceLines[i + 1].labelY - LABEL_MIN_GAP);
+    }
+    referenceLines[0].labelY = Math.max(referenceLines[0].labelY, 4);
+  }
 
   // Faint horizontal gridlines for scale reference, independent of the
   // pivot levels above -- purely visual, evenly spaced across the
@@ -235,19 +259,29 @@ export default function RangeChart({
         ))}
 
         {referenceLines.map((line) => {
-          const y = yFor(line.value);
+          const labelShifted = Math.abs(line.labelY - line.y) > 2;
           return (
             <g key={line.label}>
               <line
                 x1={PAD_LEFT}
                 x2={CHART_WIDTH}
-                y1={y}
-                y2={y}
+                y1={line.y}
+                y2={line.y}
                 strokeWidth={line.emphasis ? 1.5 : 1}
                 strokeDasharray={line.emphasis ? "2 3" : "4 3"}
                 className={line.emphasis ? "stroke-indigo-400 dark:stroke-indigo-400" : "stroke-slate-300 dark:stroke-slate-700"}
               />
-              <text x={0} y={y} dy="0.32em" className="fill-v2-muted font-mono" style={{ fontSize: "10px" }}>
+              {labelShifted && (
+                <line
+                  x1={0}
+                  x2={PAD_LEFT - 4}
+                  y1={line.labelY}
+                  y2={line.y}
+                  strokeWidth={0.75}
+                  className="stroke-slate-300 dark:stroke-slate-700"
+                />
+              )}
+              <text x={0} y={line.labelY} dy="0.32em" className="fill-v2-muted font-mono" style={{ fontSize: "10px" }}>
                 {line.label} {line.value.toFixed(4)}
               </text>
             </g>
