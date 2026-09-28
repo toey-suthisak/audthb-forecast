@@ -1871,3 +1871,48 @@ spaced 11px apart (32.0, 43.0, 54.0, ... 98.0); 1H's own labels, which
 already had real gaps as large as 20px in places, were left at their
 natural positions (only pulled apart where two would otherwise
 collide). `npx tsc --noEmit` and `npx next build` both pass clean.
+
+## RangeChart visual redesign -- color-coded levels, live price line, right-hand label gutter (2026-09-28)
+
+User asked to simplify the chart's look further ("ออกแบบให้มันดูง่ายกว่านี้"). The
+label-declutter fix above solved the overlap, but the chart still had two
+real readability gaps: every pivot line was the same neutral gray
+regardless of whether it was resistance or support (no visual hierarchy),
+and the current price only existed as a big number *above* the chart --
+disconnected from where it actually sits among R1/P/S1 on the chart
+itself, which is the exact relationship every other part of this page
+(the R3/S3 breakout narrative, the "ต้าน X / รับ Y" line under each
+Forecast card) already talks about in text.
+
+**`components/v2/RangeChart.tsx`**:
+- Moved pivot labels from a left gutter (`PAD_LEFT`, unused space) to a
+  dedicated right-hand gutter next to the last plotted point/current
+  price -- where the eye is already looking -- shrinking `PAD_LEFT` from
+  80 to 8 and adding `PAD_RIGHT = 68`. The declutter math from the
+  previous fix is unchanged, just now spacing labels in the right gutter
+  instead of the left.
+- Color-coded each line by `kind`: resistance (R1-R3) rose/red, support
+  (S1-S3) emerald/green, pivot (P) indigo, matching the resistance/
+  support color convention already used elsewhere on this page (e.g. the
+  Technical Levels card's red/green rows).
+- Added a `near` tier: R1/P/S1 (the levels the rest of the page's
+  narrative actually references) render bold and full-opacity; the
+  outer R2/R3/S2/S3 rungs render thinner and at reduced opacity --
+  visual hierarchy instead of 7 equally-loud lines.
+- Added a full-width **live current-price line** (solid blue, labeled
+  "ตอนนี้"/"Now") through the same reference-line list, sorted and
+  decluttered together with the pivot labels -- the same pattern most
+  trading platforms use to show "last price" against a level ladder.
+  This directly ties the big price number above the chart to its actual
+  position among the pivot levels instead of leaving that inference to
+  the reader.
+- Removed the generic faint gridlines whenever a pivot ladder is present
+  (they added lines that carried no information on top of ones that
+  did); kept as a fallback only when there's no pivot data at all.
+
+Verified live on WEEKLY (7 pivot lines + the new "ตอนนี้" line, 8 total,
+still cleanly spaced 11px apart with distinct colors -- confirmed via
+SVG `<text>` fill values, not just eyeballing), 1H (no regression, real
+gaps preserved), DAILY on mobile (375px, labels stack cleanly in the
+right gutter, colors and hierarchy render correctly). `npx tsc --noEmit`
+and `npx next build` both pass clean.

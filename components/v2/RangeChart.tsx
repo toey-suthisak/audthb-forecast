@@ -28,6 +28,7 @@ const STR = {
     change1H: "1H change",
     swingRange: (days: number) => `${days}-day range`,
     pivotBasis: (label: string) => `Pivot based on ${label}`,
+    nowTag: "Now",
   },
   th: {
     label: { "1H": "1 ชม.", "4H": "4 ชม.", DAILY: "รายวัน", WEEKLY: "รายสัปดาห์" } as Record<TimeframeKey, string>,
@@ -38,12 +39,19 @@ const STR = {
     change1H: "เปลี่ยนแปลง 1H",
     swingRange: (days: number) => `กรอบ ${days} วัน`,
     pivotBasis: (label: string) => `คำนวณ Pivot จาก ${label}`,
+    nowTag: "ตอนนี้",
   },
 } as const;
 
 const CHART_WIDTH = 720;
 const CHART_HEIGHT = 340;
-const PAD_LEFT = 80;
+// Left edge only needs a hair of margin -- labels used to live here (hence
+// the old wide PAD_LEFT), but they've moved to a dedicated right-hand
+// gutter next to where the eye already is (the current price/last point),
+// which also frees this side for more of the actual price line.
+const PAD_LEFT = 8;
+// Right-hand label gutter: wide enough for "R3 23.7500"-style tags.
+const PAD_RIGHT = 68;
 
 // Simple quadratic-bezier-through-midpoints smoothing -- each raw point
 // stays a control point, the curve passes through the midpoint between
@@ -161,7 +169,8 @@ export default function RangeChart({
   const max = rawMax + padding;
   const span = max - min || 1;
 
-  const plotWidth = CHART_WIDTH - PAD_LEFT;
+  const plotWidth = CHART_WIDTH - PAD_LEFT - PAD_RIGHT;
+  const plotRight = CHART_WIDTH - PAD_RIGHT;
   const stepX = series.length > 1 ? plotWidth / (series.length - 1) : 0;
   const yFor = (v: number) => CHART_HEIGHT - ((v - min) / span) * CHART_HEIGHT;
 
@@ -180,20 +189,40 @@ export default function RangeChart({
   // their real, accurate y -- only the text labels get spread apart
   // (min 11px gap) via a two-pass declutter, with a short leader when a
   // label's forced position no longer sits on its own line.
-  const rawReferenceLines: { value: number; label: string; emphasis?: boolean }[] = pivots
-    ? [
-        { value: pivots.r3, label: "R3" },
-        { value: pivots.r2, label: "R2" },
-        { value: pivots.r1, label: "R1" },
-        { value: pivots.pivot, label: "P", emphasis: true },
-        { value: pivots.s1, label: "S1" },
-        { value: pivots.s2, label: "S2" },
-        { value: pivots.s3, label: "S3" },
-      ].filter((line) => line.value >= min && line.value <= max)
+  //
+  // Each line also carries a `kind` (resistance/support/pivot/current) for
+  // color-coding and a `near` flag: R1/P/S1 are the levels every other
+  // narrative on this page already talks about (the ones a price move
+  // actually has to clear next), so they're drawn bolder and full-opacity;
+  // the outer R2/R3/S2/S3 rungs are real but secondary, so they recede
+  // (thinner, lighter) instead of competing for attention.
+  type LineKind = "resistance" | "support" | "pivot" | "current";
+  type RefLineInput = { value: number; label: string; kind: LineKind; near: boolean };
+  const pivotLines: RefLineInput[] = pivots
+    ? (
+        [
+          { value: pivots.r3, label: "R3", kind: "resistance", near: false },
+          { value: pivots.r2, label: "R2", kind: "resistance", near: false },
+          { value: pivots.r1, label: "R1", kind: "resistance", near: true },
+          { value: pivots.pivot, label: "P", kind: "pivot", near: true },
+          { value: pivots.s1, label: "S1", kind: "support", near: true },
+          { value: pivots.s2, label: "S2", kind: "support", near: false },
+          { value: pivots.s3, label: "S3", kind: "support", near: false },
+        ] as RefLineInput[]
+      ).filter((line) => line.value >= min && line.value <= max)
     : [];
 
+  // The live price as its own full-width reference line (same pattern as
+  // most trading charts) ties the pivot ladder directly to "where are we
+  // right now" instead of leaving that connection to the big number above
+  // the chart, disconnected from the R/S levels.
+  const nowLine: { value: number; label: string; kind: LineKind; near: boolean }[] =
+    currentRate !== null && currentRate >= min && currentRate <= max
+      ? [{ value: currentRate, label: t.nowTag, kind: "current", near: true }]
+      : [];
+
   const LABEL_MIN_GAP = 11;
-  const referenceLines = rawReferenceLines
+  const referenceLines = [...pivotLines, ...nowLine]
     .map((line) => ({ ...line, y: yFor(line.value), labelY: yFor(line.value) }))
     .sort((a, b) => a.y - b.y);
   for (let i = 1; i < referenceLines.length; i++) {
@@ -208,11 +237,20 @@ export default function RangeChart({
     referenceLines[0].labelY = Math.max(referenceLines[0].labelY, 4);
   }
 
-  // Faint horizontal gridlines for scale reference, independent of the
-  // pivot levels above -- purely visual, evenly spaced across the
-  // plotted min/max.
+  // Faint horizontal gridlines only when there's no pivot ladder to serve
+  // as a scale reference instead -- with pivots on screen, generic
+  // gridlines just add lines that don't mean anything on top of ones that
+  // do.
   const gridlineCount = 4;
-  const gridlines = Array.from({ length: gridlineCount + 1 }, (_, i) => CHART_HEIGHT * (i / gridlineCount));
+  const gridlines =
+    referenceLines.length > 0 ? [] : Array.from({ length: gridlineCount + 1 }, (_, i) => CHART_HEIGHT * (i / gridlineCount));
+
+  const LINE_STYLE: Record<LineKind, { stroke: string; text: string }> = {
+    resistance: { stroke: "stroke-rose-300 dark:stroke-rose-800/70", text: "fill-rose-600 dark:fill-rose-400" },
+    support: { stroke: "stroke-emerald-300 dark:stroke-emerald-800/70", text: "fill-emerald-600 dark:fill-emerald-400" },
+    pivot: { stroke: "stroke-indigo-400 dark:stroke-indigo-400", text: "fill-indigo-600 dark:fill-indigo-400" },
+    current: { stroke: "stroke-blue-500 dark:stroke-blue-400", text: "fill-blue-600 dark:fill-blue-400" },
+  };
 
   return (
     <div>
@@ -255,33 +293,44 @@ export default function RangeChart({
         </defs>
 
         {gridlines.map((y) => (
-          <line key={y} x1={PAD_LEFT} x2={CHART_WIDTH} y1={y} y2={y} strokeWidth={1} className="stroke-slate-100 dark:stroke-slate-800/60" />
+          <line key={y} x1={PAD_LEFT} x2={plotRight} y1={y} y2={y} strokeWidth={1} className="stroke-slate-100 dark:stroke-slate-800/60" />
         ))}
 
         {referenceLines.map((line) => {
           const labelShifted = Math.abs(line.labelY - line.y) > 2;
+          const style = LINE_STYLE[line.kind];
+          const isCurrent = line.kind === "current";
           return (
-            <g key={line.label}>
+            <g key={`${line.kind}-${line.label}`}>
               <line
                 x1={PAD_LEFT}
-                x2={CHART_WIDTH}
+                x2={plotRight}
                 y1={line.y}
                 y2={line.y}
-                strokeWidth={line.emphasis ? 1.5 : 1}
-                strokeDasharray={line.emphasis ? "2 3" : "4 3"}
-                className={line.emphasis ? "stroke-indigo-400 dark:stroke-indigo-400" : "stroke-slate-300 dark:stroke-slate-700"}
+                strokeWidth={isCurrent ? 1.5 : line.near ? 1.25 : 0.75}
+                strokeDasharray={isCurrent ? undefined : line.kind === "pivot" ? "2 3" : line.near ? "4 3" : "2 4"}
+                className={style.stroke}
+                opacity={isCurrent || line.near ? 1 : 0.55}
               />
               {labelShifted && (
                 <line
-                  x1={0}
-                  x2={PAD_LEFT - 4}
-                  y1={line.labelY}
-                  y2={line.y}
+                  x1={plotRight}
+                  x2={plotRight + 6}
+                  y1={line.y}
+                  y2={line.labelY}
                   strokeWidth={0.75}
-                  className="stroke-slate-300 dark:stroke-slate-700"
+                  className={style.stroke}
+                  opacity={0.55}
                 />
               )}
-              <text x={0} y={line.labelY} dy="0.32em" className="fill-v2-muted font-mono" style={{ fontSize: "10px" }}>
+              <text
+                x={plotRight + 8}
+                y={line.labelY}
+                dy="0.32em"
+                className={`${style.text} font-mono ${isCurrent ? "font-semibold" : "font-medium"}`}
+                style={{ fontSize: line.near || isCurrent ? "10px" : "9px" }}
+                opacity={isCurrent || line.near ? 1 : 0.8}
+              >
                 {line.label} {line.value.toFixed(4)}
               </text>
             </g>
